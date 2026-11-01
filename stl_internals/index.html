@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>内功期 · STL 源码解剖 - C++ 学习路线</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+    background: linear-gradient(135deg, #0f766e 0%, #1e3a8a 100%);
+    min-height: 100vh;
+    padding: 30px 20px;
+    color: #333;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+
+  .back-btn {
+    display: inline-block;
+    padding: 8px 16px;
+    background: rgba(15, 23, 42, 0.55);
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    transition: background 0.2s;
+  }
+  .back-btn:hover { background: rgba(255,255,255,0.3); }
+
+  .header { text-align: center; color: white; margin-bottom: 30px; }
+  .header h1 { font-size: 36px; margin-bottom: 10px; text-shadow: 2px 2px 8px rgba(0,0,0,0.2); }
+  .header p { font-size: 16px; }
+
+  .intro-section {
+    background: rgba(255,255,255,0.95);
+    border-radius: 16px;
+    padding: 28px 32px;
+    margin-bottom: 24px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.1);
+  }
+  .intro-section h2 {
+    color: #0f766e;
+    margin-bottom: 12px;
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .intro-section p {
+    color: #555;
+    line-height: 1.8;
+    font-size: 14px;
+  }
+  .intro-section p + p { margin-top: 10px; }
+
+  .section-title {
+    color: white;
+    font-size: 22px;
+    margin: 30px 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+  .card {
+    background: white;
+    border-radius: 16px;
+    padding: 22px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+    transition: all 0.3s ease;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #0d9488, #2563eb);
+  }
+  .card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 40px rgba(0,0,0,0.18);
+  }
+  .card-icon { font-size: 32px; margin-bottom: 10px; }
+  .card-title { font-size: 17px; font-weight: 700; color: #222; margin-bottom: 8px; }
+  .card-desc { font-size: 13px; color: #666; line-height: 1.6; margin-bottom: 14px; }
+  .card-meta { display: flex; gap: 8px; flex-wrap: wrap; }
+  .card-step {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    background: #ccfbf1;
+    color: #0f766e;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 12px;
+  }
+  .list-note {
+    color: #0f766e;
+    font-size: 13px;
+    line-height: 1.8;
+    margin: -6px 0 16px;
+    padding: 10px 14px;
+    background: rgba(255,255,255,0.82);
+    border-left: 3px solid currentColor;
+    border-radius: 0 10px 10px 0;
+  }
+  .list-note a { color: inherit; font-weight: 700; text-decoration: underline; }
+
+  .tag {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .tag.intermediate { background: #e3f2fd; color: #1565c0; }
+  .tag.advanced { background: #fff3e0; color: #be4300; }
+  .tag.expert { background: #ffebee; color: #c62828; }
+
+  .feature-section {
+    background: rgba(255,255,255,0.95);
+    border-radius: 16px;
+    padding: 28px 32px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.1);
+  }
+  .feature-section h2 {
+    color: #0f766e;
+    margin-bottom: 16px;
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .feature-section p { color: #555; line-height: 1.8; margin-bottom: 12px; font-size: 14px; }
+  .feature-section ul { padding-left: 22px; color: #555; line-height: 2; font-size: 14px; }
+  .feature-section li strong { color: #333; }
+  .feature-section a { color: #0f766e; }
+
+  .master-section {
+    background: linear-gradient(135deg, #fdfbfb, #ebedee);
+    border-radius: 16px;
+    padding: 28px 32px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.1);
+  }
+  .master-section h2 {
+    color: #333;
+    margin-bottom: 16px;
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .master-section p { color: #555; line-height: 1.8; margin-bottom: 12px; font-size: 14px; }
+  .master-section ul { padding-left: 22px; color: #555; line-height: 2; font-size: 14px; }
+  .master-section li strong { color: #0f766e; }
+
+  .visual-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+  }
+  .visual-links a {
+    display: inline-block;
+    padding: 10px 20px;
+    border: 2px solid #0f766e;
+    border-radius: 30px;
+    color: #0f766e;
+    background: #fff;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.25s ease;
+  }
+  .visual-links a:hover { background: #0f766e; color: #fff; }
+
+  @media (max-width: 600px) {
+    body { padding: 20px 12px; }
+    .header h1 { font-size: 26px; }
+    .intro-section, .feature-section, .master-section { padding: 20px; }
+    .card-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="../index.html" class="back-btn">← 返回总路线图</a>
+
+  <div class="header">
+    <h1>🔬 内功期 · STL 源码解剖</h1>
+    <p>三根指针 · 一个哨兵 · 一棵红黑树 · 一排桶 · 六件套的底层逻辑</p>
+  </div>
+
+  <div class="intro-section">
+    <h2>📖 模块简介</h2>
+    <p>
+      上一个模块教你<strong>怎么用</strong> STL，这个模块往下钻一层，看<strong>标准库怎么实现的</strong>。
+      我们不抄一整份 STL，而是盯着六个最关键的地方：配置器怎么分配内存、vector 的三根指针怎么长、
+      list 的哨兵怎么绕、红黑树怎么变色旋转、哈希表怎么 rehash、迭代器和算法怎么配合。
+    </p>
+    <p>
+      每一章都是一个可编译、可运行的“探针程序”：用 <code>sizeof</code>、元素地址、配置器计数器、
+      <code>bucket_count()</code> 把内部状态打印出来。你看到的不是别人总结的结论，而是自己跑出来的证据。
+    </p>
+    <div class="visual-links">
+      <a href="tutorial.md">📖 学习指南</a>
+      <a href="../visuals/index.html">🎬 图解专区</a>
+      <a href="../visuals/allocator.html">🎬 配置器图解</a>
+      <a href="../visuals/dynamic_array.html">🎬 动态数组图解</a>
+      <a href="../visuals/list_deque.html">🎬 list / deque 图解</a>
+      <a href="../visuals/rb_tree.html">🎬 红黑树图解</a>
+      <a href="../visuals/hash_table.html">🎬 哈希表图解</a>
+      <a href="../visuals/iterators.html">🎬 迭代器图解</a>
+    </div>
+  </div>
+
+  <div class="section-title">
+    <span>📂</span> 学习文件列表
+  </div>
+  <p class="list-note">
+    六张卡片是<strong>六个台阶</strong>，按 <strong>第 1 步 → 第 6 步</strong> 走。
+    第 1 步配置器是地基，跳过它，后面看不懂节点从哪来；第 4 步红黑树是重头戏，多花点时间；
+    第 6 步算法收口，把容器、迭代器、算法串成一条线。每步的重点和练习见
+    <a href="tutorial.md">📖 学习指南</a>。
+  </p>
+
+  <div class="card-grid">
+    <a href="01_allocator_traits.cpp" class="card">
+      <div class="card-step">第 1 步 · 地基</div>
+      <div class="card-icon">🧱</div>
+      <div class="card-title">配置器：容器的地基</div>
+      <div class="card-desc">allocate/deallocate 与 construct/destroy 分离、allocator_traits 门面、rebind 如何把 int 配置器变成节点配置器。</div>
+      <div class="card-meta"><span class="tag intermediate">中级</span></div>
+    </a>
+
+    <a href="02_vector_internals.cpp" class="card">
+      <div class="card-step">第 2 步 · 最常用</div>
+      <div class="card-icon">📏</div>
+      <div class="card-title">vector：三根指针与增长曲线</div>
+      <div class="card-desc">_M_start/_M_finish/_M_end_of_storage、2 倍扩容、move_if_noexcept、reserve/resize、迭代器失效，再手写一个 MiniVector。</div>
+      <div class="card-meta"><span class="tag intermediate">中级</span></div>
+    </a>
+
+    <a href="03_list_deque_internals.cpp" class="card">
+      <div class="card-step">第 3 步</div>
+      <div class="card-icon">🧷</div>
+      <div class="card-title">list 与 deque：节点和分段</div>
+      <div class="card-desc">list 的哨兵环与 splice、deque 的中控器与 512 字节缓冲区、两端 O(1) 与中间插入的搬移代价。</div>
+      <div class="card-meta"><span class="tag intermediate">中级</span></div>
+    </a>
+
+    <a href="04_rbtree_map_internals.cpp" class="card">
+      <div class="card-step">第 4 步 · 重头戏</div>
+      <div class="card-icon">🌳</div>
+      <div class="card-title">map/set：红黑树的平衡术</div>
+      <div class="card-desc">五条规矩、插入的变色/单旋/双旋、header 节点与 end()、operator[] 的插入语义，附一棵可验证的小红黑树。</div>
+      <div class="card-meta"><span class="tag advanced">进阶</span></div>
+    </a>
+
+    <a href="05_hashtable_internals.cpp" class="card">
+      <div class="card-step">第 5 步</div>
+      <div class="card-icon">🗃️</div>
+      <div class="card-title">unordered_map：桶、链表与 rehash</div>
+      <div class="card-desc">桶数组 + 全局单链表、质数扩容、装载因子、rehash 后迭代器失效但引用稳定、坏哈希的桶长分布。</div>
+      <div class="card-meta"><span class="tag advanced">进阶</span></div>
+    </a>
+
+    <a href="06_iterators_algorithms.cpp" class="card">
+      <div class="card-step">第 6 步 · 收口</div>
+      <div class="card-icon">⚡</div>
+      <div class="card-title">迭代器与算法：STL 的胶水</div>
+      <div class="card-desc">iterator_traits、标签分派、内省排序的比较次数、lower_bound 的二分、back_inserter/ostream_iterator 等适配器。</div>
+      <div class="card-meta"><span class="tag advanced">进阶</span></div>
+    </a>
+  </div>
+
+  <div class="feature-section">
+    <h2>🔧 读源码的四把工具</h2>
+    <ul>
+      <li><strong>先看成员变量：</strong> vector 三根指针、deque 一个中控器加两个迭代器、map 一个 header 加 size。数据布局决定行为。</li>
+      <li><strong>用调试器单步：</strong> 在 <code>push_back</code> 里断点看扩容前后指针怎么变，在 <code>rehash</code> 里看桶数组怎么换，比干读快十倍。</li>
+      <li><strong>写探针程序：</strong> 用 <code>sizeof</code>、<code>&amp;元素</code>、配置器计数器、<code>bucket_count()</code> 把私有状态“打印”出来，本模块六章都是这么干的。</li>
+      <li><strong>对照 cppreference：</strong> 标准规定“保证什么”，源码展示“怎么做到”。先看契约再看实现，别把 <code>_M_start</code> 这种私有名字当标准。</li>
+    </ul>
+  </div>
+
+  <div class="feature-section">
+    <h2>📚 学习建议</h2>
+    <ul>
+      <li><strong>不要按头读到尾：</strong> 每章先跑一遍程序，看输出，再带着“为什么”去读源码。源码是用来查证的，不是用来通读的。</li>
+      <li><strong>抓住数据布局：</strong> 容器的一切行为都藏在成员变量里。先画指针图，再看算法，比一上来啃模板容易得多。</li>
+      <li><strong>版本差异要心里有数：</strong> 本模块以 libstdc++ 为主，扩容倍数、缓冲区大小、桶数序列都是实现细节；MSVC/libc++ 会不同，套路相同。</li>
+      <li><strong>每章练习都要做：</strong> 尤其是给红黑树补删除、给 MiniVector 补移动构造，这两道最能检验你是不是真看懂了。</li>
+      <li><strong>读源码别怕下划线：</strong> <code>_M_</code>、<code>__</code> 只是实现保留名。先看类型和注释，再看函数名，最后才抠细节。</li>
+    </ul>
+  </div>
+
+  <div class="master-section">
+    <h2>👴 老师傅的话</h2>
+    <p>徒弟，能走到“读源码”这一步，说明你已经不满足于当 API 调用员了。这是好事，但师傅得先给你泼盆冷水：</p>
+    <p><strong>读源码不是为了炫技，是为了少踩坑、选对容器、写出能推演性能的代码。</strong>
+      你知道了 vector 扩容会搬家，就不会在循环里存着迭代器还 push_back；
+      你知道了 unordered_map rehash 只废迭代器不废引用，就敢在合适的场景拿指针；
+      你知道了红黑树插入最多两次旋转，就明白 map 的有序不是白来的。</p>
+    <ul>
+      <li><strong>先猜后证。</strong> 看到 <code>vector</code> 的 <code>capacity</code> 序列，先猜“两倍”，再写程序验证。带着问题读，比从头啃效率高得多。</li>
+      <li><strong>先布局后算法。</strong> 红黑树难，难在旋转规则；但节点里只有颜色、父、左、右。把结构画出来，算法就没那么玄。</li>
+      <li><strong>标准是契约，实现是手段。</strong> map 保证有序和 O(log n)，红黑树只是 libstdc++ 选的手段。别把实现细节当标准。</li>
+      <li><strong>别想一次读完。</strong> 挑一个容器、一个函数，顺着调用链看到底，看懂就停。贪多嚼不烂。</li>
+    </ul>
+    <p>最后一句：<strong>光看不动手，等于没学。</strong> 把每章的探针改一改——换个类型、换个数、换个坏哈希——输出变了，理解才真的长在你身上。</p>
+  </div>
+</div>
+</body>
+</html>

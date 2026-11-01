@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>迭代器：算法只认这张能力表 - C++ 图解</title>
+<link rel="stylesheet" href="visual.css">
+</head>
+<body>
+<div class="container">
+  <div class="top-links">
+    <a class="back-btn" href="index.html">← 图解专区</a>
+    <a class="top-link" href="../stl_internals/index.html">STL 模块</a>
+    <a class="top-link" href="../stl_internals/tutorial.md">模块教程</a>
+    <a class="top-link" href="../index.html">总路线图</a>
+  </div>
+
+  <header class="page-head">
+    <div class="kicker">图解专区 · STL 源码</div>
+    <h1>迭代器：算法只认这张能力表</h1>
+    <p>容器和算法本来不认识彼此：<code>vector</code> 不知道 <code>sort</code> 长什么样，<code>sort</code> 也不知道 <code>vector</code> 内部有三根指针，中间只隔着一层迭代器。这一页把五个分类、<code>iterator_traits</code> 的能力说明书、<code>distance</code> / <code>advance</code> 的标签分派、内省排序的三路切换、<code>lower_bound</code> 的二分收缩，以及适配器与 erase-remove 逐帧画出来。</p>
+  </header>
+
+  <div class="viz-shell">
+    <div class="stage" id="stage" aria-live="polite"></div>
+    <aside class="side">
+      <div class="step-index" id="counter">1 / 6</div>
+      <h2 id="stepTitle"></h2>
+      <p class="caption" id="caption" aria-live="polite"></p>
+      <div class="code-wrap">
+        <div class="code-label">代码对照</div>
+        <pre class="code"><code id="code"></code></pre>
+      </div>
+    </aside>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-ghost" id="prevBtn" type="button">← 上一步</button>
+    <button class="btn btn-primary" id="nextBtn" type="button">下一步 →</button>
+    <div class="progress"><i id="progressBar"></i></div>
+    <span class="counter" id="stepCountLabel"></span>
+    <button class="btn btn-ghost" id="resetBtn" type="button">重置</button>
+  </div>
+
+  <div class="step-nav" id="steps"></div>
+
+  <p class="page-foot">
+    对应源码：<a href="../stl_internals/06_iterators_algorithms.cpp">06_iterators_algorithms.cpp</a> ·
+    相关教程：<a href="../stl_internals/tutorial.md">stl_internals/tutorial.md</a> ·
+    图中的比较次数与 ++ 次数来自该文件里 CountingIt / CountingLess 的实测输出。
+  </p>
+</div>
+
+<script>
+window.STEPS = [
+  {
+    nav: '五类迭代器',
+    title: '1. 五类迭代器：一条能力只增不减的阶梯',
+    caption: 'C++ 按“能做什么”把迭代器分成五类。输入、前向、双向、随机访问是一条能力只增不减的阶梯；输出迭代器是独立的一支，只能写。算法不关心你是 <code>vector</code> 还是 <code>deque</code>，只关心 traits 里写的那个标签。',
+    code: 'input_iterator_tag         只能读，单遍\noutput_iterator_tag        只能写，独立一支\nforward_iterator_tag       可读可写，多遍，能 ++\nbidirectional_iterator_tag 还能 --\nrandom_access_iterator_tag 还能 +n、-n、比大小\n\n// vector / deque / int*  → random_access\n// list                   → bidirectional\n// unordered_map          → forward',
+    highlight: [0, 1, 2, 3, 4],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="五类迭代器的能力对照表">
+  <text x="28" y="32" class="svg-title">能力清单：读、写、多遍、++、--、+n、比大小</text>
+
+  <circle cx="560" cy="60" r="6" class="svg-dot"/>
+  <text x="574" y="64" class="svg-small">支持</text>
+  <circle cx="640" cy="60" r="6" class="svg-box"/>
+  <text x="654" y="64" class="svg-small">不支持</text>
+
+  <text x="28" y="94" class="svg-small">类别</text>
+  <text x="220" y="94" text-anchor="middle" class="svg-small">可读</text>
+  <text x="300" y="94" text-anchor="middle" class="svg-small">可写</text>
+  <text x="380" y="94" text-anchor="middle" class="svg-small">多遍</text>
+  <text x="460" y="94" text-anchor="middle" class="svg-small">++</text>
+  <text x="540" y="94" text-anchor="middle" class="svg-small">--</text>
+  <text x="620" y="94" text-anchor="middle" class="svg-small">+n</text>
+  <text x="700" y="94" text-anchor="middle" class="svg-small">比大小</text>
+  <line x1="28" y1="104" x2="728" y2="104" stroke="#cbd5e1" stroke-width="1.4"/>
+
+  <text x="28" y="134" class="svg-mono" style="font-size:11px">输入 input</text>
+  <circle cx="220" cy="130" r="6" class="svg-dot"/>
+  <circle cx="300" cy="130" r="6" class="svg-box"/>
+  <circle cx="380" cy="130" r="6" class="svg-box"/>
+  <circle cx="460" cy="130" r="6" class="svg-dot"/>
+  <circle cx="540" cy="130" r="6" class="svg-box"/>
+  <circle cx="620" cy="130" r="6" class="svg-box"/>
+  <circle cx="700" cy="130" r="6" class="svg-box"/>
+  <line x1="28" y1="152" x2="728" y2="152" stroke="#e2e8f0" stroke-width="1"/>
+
+  <text x="28" y="180" class="svg-mono" style="font-size:11px">输出 output</text>
+  <circle cx="220" cy="176" r="6" class="svg-box"/>
+  <circle cx="300" cy="176" r="6" class="svg-dot"/>
+  <circle cx="380" cy="176" r="6" class="svg-box"/>
+  <circle cx="460" cy="176" r="6" class="svg-dot"/>
+  <circle cx="540" cy="176" r="6" class="svg-box"/>
+  <circle cx="620" cy="176" r="6" class="svg-box"/>
+  <circle cx="700" cy="176" r="6" class="svg-box"/>
+  <line x1="28" y1="198" x2="728" y2="198" stroke="#e2e8f0" stroke-width="1"/>
+
+  <text x="28" y="226" class="svg-mono" style="font-size:11px">前向 forward</text>
+  <circle cx="220" cy="222" r="6" class="svg-dot"/>
+  <circle cx="300" cy="222" r="6" class="svg-dot"/>
+  <circle cx="380" cy="222" r="6" class="svg-dot"/>
+  <circle cx="460" cy="222" r="6" class="svg-dot"/>
+  <circle cx="540" cy="222" r="6" class="svg-box"/>
+  <circle cx="620" cy="222" r="6" class="svg-box"/>
+  <circle cx="700" cy="222" r="6" class="svg-box"/>
+  <line x1="28" y1="244" x2="728" y2="244" stroke="#e2e8f0" stroke-width="1"/>
+
+  <text x="28" y="272" class="svg-mono" style="font-size:11px">双向 bidirectional</text>
+  <circle cx="220" cy="268" r="6" class="svg-dot"/>
+  <circle cx="300" cy="268" r="6" class="svg-dot"/>
+  <circle cx="380" cy="268" r="6" class="svg-dot"/>
+  <circle cx="460" cy="268" r="6" class="svg-dot"/>
+  <circle cx="540" cy="268" r="6" class="svg-dot"/>
+  <circle cx="620" cy="268" r="6" class="svg-box"/>
+  <circle cx="700" cy="268" r="6" class="svg-box"/>
+  <line x1="28" y1="290" x2="728" y2="290" stroke="#e2e8f0" stroke-width="1"/>
+
+  <text x="28" y="318" class="svg-mono" style="font-size:11px">随机访问 random access</text>
+  <circle cx="220" cy="314" r="6" class="svg-dot"/>
+  <circle cx="300" cy="314" r="6" class="svg-dot"/>
+  <circle cx="380" cy="314" r="6" class="svg-dot"/>
+  <circle cx="460" cy="314" r="6" class="svg-dot"/>
+  <circle cx="540" cy="314" r="6" class="svg-dot"/>
+  <circle cx="620" cy="314" r="6" class="svg-dot"/>
+  <circle cx="700" cy="314" r="6" class="svg-dot"/>
+  <line x1="28" y1="336" x2="728" y2="336" stroke="#cbd5e1" stroke-width="1.4"/>
+
+  <text x="28" y="362" class="svg-text">前四类只增不减；输出迭代器是独立的一支，只能写、只能 ++。</text>
+  <text x="28" y="384" class="svg-text">vector / deque / int* → random_access；list → bidirectional；</text>
+  <text x="28" y="400" class="svg-small">unordered_map → forward。算法不看容器名字，只读这张能力表。</text>
+</svg>
+`
+  },
+  {
+    nav: '类型查询台',
+    title: '2. iterator_traits：算法来这里查类型',
+    caption: '算法需要知道 <code>value_type</code> 才能声明临时变量，需要知道 <code>difference_type</code> 才能存距离，更需要知道 <code>iterator_category</code> 才能选实现。这些都不问容器，只问 <code>iterator_traits&lt;It&gt;</code> 这张查询台。',
+    code: 'using Traits = iterator_traits<vector<int>::iterator>;\n\n// value_type        = int\n// difference_type   = ptrdiff_t\n// pointer           = int*\n// reference         = int&\n// iterator_category = random_access_iterator_tag\n\n// 算法只读这张说明书，不看容器类型',
+    highlight: [0, 2, 3],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="iterator_traits 作为类型查询台，给出五个 typedef">
+  <text x="28" y="32" class="svg-title">迭代器进来，五个 typedef 出去</text>
+
+  <rect x="28" y="100" width="180" height="76" rx="10" class="svg-box"/>
+  <text x="42" y="128" class="svg-mono" style="font-size:10.5px">vector&lt;int&gt;::iterator</text>
+  <text x="42" y="150" class="svg-small">本质是包了一个 int*</text>
+  <text x="42" y="168" class="svg-small">自己不知道算法要什么</text>
+
+  <line x1="212" y1="138" x2="258" y2="138" class="svg-arrow-accent svg-flow"/>
+
+  <rect x="262" y="88" width="196" height="110" rx="12" class="svg-box-accent svg-pulse"/>
+  <text x="278" y="116" class="svg-mono" style="font-size:11px">iterator_traits&lt;It&gt;</text>
+  <text x="278" y="142" class="svg-small">五个 typedef 的查询台</text>
+  <text x="278" y="164" class="svg-small">算法只读这里</text>
+  <text x="278" y="186" class="svg-small">从不问容器名字</text>
+
+  <line x1="462" y1="143" x2="518" y2="74" class="svg-arrow-accent"/>
+  <line x1="462" y1="143" x2="518" y2="126" class="svg-arrow-accent"/>
+  <line x1="462" y1="143" x2="518" y2="178" class="svg-arrow-accent"/>
+  <line x1="462" y1="143" x2="518" y2="230" class="svg-arrow-accent"/>
+  <line x1="462" y1="143" x2="518" y2="282" class="svg-arrow-accent"/>
+
+  <rect x="520" y="52" width="218" height="44" rx="8" class="svg-box"/>
+  <text x="534" y="69" class="svg-small">value_type</text>
+  <text x="534" y="88" class="svg-mono" style="font-size:11px">int</text>
+
+  <rect x="520" y="104" width="218" height="44" rx="8" class="svg-box"/>
+  <text x="534" y="121" class="svg-small">difference_type</text>
+  <text x="534" y="140" class="svg-mono" style="font-size:11px">ptrdiff_t</text>
+
+  <rect x="520" y="156" width="218" height="44" rx="8" class="svg-box"/>
+  <text x="534" y="173" class="svg-small">pointer</text>
+  <text x="534" y="192" class="svg-mono" style="font-size:11px">int*</text>
+
+  <rect x="520" y="208" width="218" height="44" rx="8" class="svg-box"/>
+  <text x="534" y="225" class="svg-small">reference</text>
+  <text x="534" y="244" class="svg-mono" style="font-size:11px">int&amp;</text>
+
+  <rect x="520" y="260" width="218" height="44" rx="8" class="svg-box-warn"/>
+  <text x="534" y="277" class="svg-small">iterator_category</text>
+  <text x="534" y="296" class="svg-mono" style="font-size:11px">random_access_iterator_tag</text>
+
+  <text x="28" y="338" class="svg-text">算法读 value_type 定临时变量，读 category 选实现路径。</text>
+  <text x="28" y="364" class="svg-text">所以同一个 sort 能排 vector、deque、原生数组，排不了 list。</text>
+  <text x="28" y="392" class="svg-small">裸指针 int* 也有 traits，所以 C 数组照样能用 std::sort。</text>
+</svg>
+`
+  },
+  {
+    nav: '分派代价',
+    title: '3. 同一句 advance，底层代价差 1000 倍',
+    caption: '这不是重载魔法，而是标签分派：把 <code>iterator_category</code> 当成第三个参数，选出对应实现。随机访问迭代器直接做减法或 <code>+=</code>，0 次 <code>++</code>；前向迭代器只能一步步走，1000 个元素就是 1000 次 <code>++</code>；双向迭代器走 <code>advance(500)</code> 是 500 步，<code>advance(-200)</code> 是 200 步。',
+    code: '// 随机访问：1 次减法，0 次 ++\nauto n = distance(first, last);\n\n// 前向：1000 个元素，1000 次 ++\nwhile (n--) ++it;\n\n// 双向\nadvance(it, 500);    // 500 次 ++\nadvance(it, -200);   // 200 次 --\n\n// 随机访问\nadvance(it, 500);    // 直接 +=，0 次 ++',
+    highlight: [1, 4, 7, 8, 11],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="distance 与 advance 按迭代器类别分派到不同实现">
+  <text x="28" y="32" class="svg-title">同一个调用，三条实现路径</text>
+
+  <rect x="28" y="54" width="700" height="52" rx="10" class="svg-box-accent"/>
+  <text x="46" y="86" class="svg-mono" style="font-size:11px">std::advance(it, n)  /  std::distance(first, last)</text>
+  <text x="430" y="86" class="svg-small">取出 category，选一个重载</text>
+
+  <line x1="140" y1="106" x2="140" y2="134" class="svg-arrow-accent"/>
+  <line x1="384" y1="106" x2="384" y2="134" class="svg-arrow-accent"/>
+  <line x1="628" y1="106" x2="628" y2="134" class="svg-arrow-accent"/>
+
+  <rect x="28" y="136" width="224" height="170" rx="10" class="svg-box-good"/>
+  <text x="42" y="162" class="svg-text">随机访问</text>
+  <text x="42" y="188" class="svg-mono" style="font-size:11px">it += n</text>
+  <text x="42" y="214" class="svg-small">distance：1 次减法</text>
+  <text x="42" y="236" class="svg-small">++ 调用 0 次</text>
+  <text x="42" y="262" class="svg-good-text" style="font-size:12.5px">O(1)</text>
+  <text x="42" y="288" class="svg-small">vector / deque / int*</text>
+
+  <rect x="272" y="136" width="224" height="170" rx="10" class="svg-box"/>
+  <text x="286" y="162" class="svg-text">双向</text>
+  <text x="286" y="188" class="svg-mono" style="font-size:11px">while (n--) ++it</text>
+  <text x="286" y="214" class="svg-small">advance(500) → 500 次 ++</text>
+  <text x="286" y="236" class="svg-small">advance(-200) → 200 次 --</text>
+  <text x="286" y="262" class="svg-bad-text" style="font-size:12.5px">O(n)</text>
+  <text x="286" y="288" class="svg-small">list / map / set</text>
+
+  <rect x="516" y="136" width="222" height="170" rx="10" class="svg-box"/>
+  <text x="530" y="162" class="svg-text">前向</text>
+  <text x="530" y="188" class="svg-mono" style="font-size:11px">while (n--) ++it</text>
+  <text x="530" y="214" class="svg-small">distance(begin, end)</text>
+  <text x="530" y="236" class="svg-small">1000 个元素 → 1000 次 ++</text>
+  <text x="530" y="262" class="svg-bad-text" style="font-size:12.5px">O(n)</text>
+  <text x="530" y="288" class="svg-small">单向链表、哈希桶</text>
+
+  <text x="28" y="336" class="svg-text">同一句 std::distance，对不同迭代器走了不同代码路径。</text>
+  <text x="28" y="362" class="svg-text">所以 list 的 size() 是 O(1)，distance(list.begin(), list.end()) 仍是 O(n)。</text>
+  <text x="28" y="390" class="svg-small">分派靠空标签重载：自己写 myAdvance 时，多写一个 category 参数就行。</text>
+</svg>
+`
+  },
+  {
+    nav: '内省排序',
+    title: '4. 内省排序：快排为主，堆排兜底，插入收尾',
+    caption: '<code>std::sort</code> 不是纯快排。它先用三数取中选 pivot 递归快排；递归深度超过 <code>2 × log2(n)</code> 就改用堆排序，堵住最坏 <code>O(n²)</code>；小区间（通常 ≤ 16 个元素）改用插入排序，省掉递归开销。实测 n=5000 时三种输入都没有退化。',
+    code: '// 内省排序 introsort\n// 1. 三数取中选 pivot，递归快排\n// 2. 递归深度 > 2 × log2(n) → 堆排序\n// 3. 子区间 ≤ 16 个元素 → 插入排序\n\nsort(v.begin(), v.end(), CountingLess{});\n// n=5000：n log2(n) ≈ 61437\n// 随机 / 已有序 / 逆序 都没退化到 O(n²)\n// 代价：不稳定，相等元素的相对顺序不保证',
+    highlight: [2, 3],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="内省排序的三路切换：快排、堆排序兜底、小区间插入排序">
+  <text x="28" y="32" class="svg-title">一次 sort，三套算法轮班</text>
+
+  <rect x="250" y="54" width="260" height="44" rx="10" class="svg-box-accent"/>
+  <text x="380" y="82" text-anchor="middle" class="svg-mono" style="font-size:11px">std::sort  →  introsort</text>
+
+  <line x1="380" y1="98" x2="128" y2="124" class="svg-arrow-accent"/>
+  <line x1="380" y1="98" x2="380" y2="124" class="svg-arrow-accent"/>
+  <line x1="380" y1="98" x2="630" y2="124" class="svg-arrow-accent"/>
+
+  <rect x="28" y="126" width="200" height="64" rx="9" class="svg-box"/>
+  <text x="42" y="150" class="svg-mono" style="font-size:11px">① 快排划分</text>
+  <text x="42" y="172" class="svg-small">三数取中选 pivot</text>
+
+  <rect x="280" y="126" width="200" height="64" rx="9" class="svg-box-warn"/>
+  <text x="294" y="150" class="svg-mono" style="font-size:11px">② 深度超限</text>
+  <text x="294" y="172" class="svg-small">&gt; 2 × log2(n) 就换路</text>
+
+  <rect x="532" y="126" width="196" height="64" rx="9" class="svg-box-good"/>
+  <text x="546" y="150" class="svg-mono" style="font-size:11px">③ 小区间</text>
+  <text x="546" y="172" class="svg-small">≤ 16 个元素就收尾</text>
+
+  <line x1="128" y1="190" x2="128" y2="204" class="svg-arrow"/>
+  <line x1="380" y1="190" x2="380" y2="204" class="svg-arrow"/>
+  <line x1="630" y1="190" x2="630" y2="204" class="svg-arrow"/>
+
+  <rect x="28" y="206" width="200" height="50" rx="9" class="svg-box"/>
+  <text x="128" y="236" text-anchor="middle" class="svg-text">递归处理左右两半</text>
+
+  <rect x="280" y="206" width="200" height="50" rx="9" class="svg-box-warn"/>
+  <text x="380" y="236" text-anchor="middle" class="svg-text">堆排序接手</text>
+
+  <rect x="532" y="206" width="196" height="50" rx="9" class="svg-box-good"/>
+  <text x="630" y="236" text-anchor="middle" class="svg-text">插入排序接手</text>
+
+  <line x1="28" y1="276" x2="728" y2="276" stroke="#e2e8f0" stroke-width="1"/>
+
+  <text x="28" y="300" class="svg-text">纯快排遇到已有序 / 逆序输入会退化到 O(n²)，堆排序把最坏压回 O(n log n)。</text>
+  <text x="28" y="324" class="svg-text">小区间（≤ 16 个元素）递归开销大，换插入排序，常数更小。</text>
+  <text x="28" y="350" class="svg-text">实测 n=5000：n log2(n) ≈ 61437，三种输入都在同一量级，没有退化。</text>
+  <text x="28" y="378" class="svg-small">代价：不稳定，相等元素的相对顺序不保证；要稳定就用 stable_sort。</text>
+  <text x="28" y="400" class="svg-small">list 用不了 std::sort：迭代器不满足随机访问，它有自己的 list::sort()。</text>
+</svg>
+`
+  },
+  {
+    nav: '二分查找',
+    title: '5. lower_bound：每比一次，砍掉一半',
+    caption: '在 0..999 里找 999，<code>lower_bound</code> 只要 10 次比较，<code>find_if</code> 要从头扫到尾，1000 次。<code>log2(1000) ≈ 10</code>，量级差在这里。代价是前提：区间必须已经有序，否则二分不会报错，只会给你一个看起来对的错答案。',
+    code: 'const int N = 1000;\nvector<int> v(N);\niota(v.begin(), v.end(), 0);      // 0..999，天然有序\n\nauto it = lower_bound(v.begin(), v.end(), N - 1, CountingLess{});\n// lower_bound 比较 10 次，命中值 = 999\n\nauto found = find_if(v.begin(), v.end(), CountingEqual{N - 1});\n// find_if 比较 1000 次\n// log2(1000) ≈ 10',
+    highlight: [4, 5],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="lower_bound 在 0 到 999 中查找 999 时区间逐步收缩">
+  <text x="28" y="32" class="svg-title">找 999：区间每次砍半，向右收拢</text>
+
+  <rect x="100" y="88" width="540" height="26" rx="5" class="svg-field"/>
+  <rect x="100" y="88" width="540" height="26" rx="5" class="svg-box-accent"/>
+  <text x="28" y="105" class="svg-small">开始</text>
+  <text x="648" y="105" class="svg-small">[0, 1000)</text>
+
+  <rect x="100" y="142" width="540" height="26" rx="5" class="svg-field"/>
+  <rect x="370" y="142" width="270" height="26" rx="5" class="svg-box-accent"/>
+  <text x="28" y="159" class="svg-small">1 次后</text>
+  <text x="648" y="159" class="svg-small">[500, 1000)</text>
+
+  <rect x="100" y="196" width="540" height="26" rx="5" class="svg-field"/>
+  <rect x="505" y="196" width="135" height="26" rx="5" class="svg-box-accent"/>
+  <text x="28" y="213" class="svg-small">2 次后</text>
+  <text x="648" y="213" class="svg-small">[750, 1000)</text>
+
+  <rect x="100" y="250" width="540" height="26" rx="5" class="svg-field"/>
+  <rect x="572" y="250" width="68" height="26" rx="5" class="svg-box-accent"/>
+  <text x="28" y="267" class="svg-small">3 次后</text>
+  <text x="648" y="267" class="svg-small">[875, 1000)</text>
+
+  <rect x="100" y="304" width="540" height="26" rx="5" class="svg-field"/>
+  <rect x="606" y="304" width="34" height="26" rx="5" class="svg-box-accent"/>
+  <text x="28" y="321" class="svg-small">4 次后</text>
+  <text x="648" y="321" class="svg-small">[937, 1000)</text>
+
+  <text x="100" y="350" class="svg-small">10 次之后，区间只剩 1 个位置，就是答案。</text>
+
+  <text x="28" y="378" class="svg-good-text" style="font-size:13px">lower_bound 比较 10 次</text>
+  <text x="300" y="378" class="svg-bad-text" style="font-size:13px">find_if 比较 1000 次</text>
+  <text x="548" y="378" class="svg-small">log2(1000) ≈ 10</text>
+
+  <text x="28" y="400" class="svg-small">区间必须有序：乱序时二分不报错，只给一个看起来对的错答案。</text>
+</svg>
+`
+  },
+  {
+    nav: '适配与删除',
+    title: '6. 适配器套一层壳，erase-remove 才真删',
+    caption: '<code>reverse_iterator</code> 把 <code>++</code> 翻译成 <code>--</code>，<code>back_inserter</code> 把赋值翻译成 <code>push_back</code>，<code>move_iterator</code> 把 <code>*it</code> 翻译成 <code>std::move</code>——适配器不改变容器。而 <code>remove</code> 只搬元素、返回新的逻辑尾，真正删除要再调一次 <code>erase(newEnd, v.end())</code>。',
+    code: 'copy(src.begin(), src.end(), back_inserter(dst));\nfor (auto rit = v.rbegin(); rit != v.rend(); ++rit) cout << *rit << " ";\n// rbegin().base() == v.end()\n\nvector<int> v{1, 2, 3, 2, 4, 2, 5};\nauto newEnd = remove(v.begin(), v.end(), 2);\n// size 仍是 7，newEnd 之后的值已无意义\nv.erase(newEnd, v.end());   // 这一步才真删\n// capacity 不变：erase 只改 size',
+    highlight: [5, 7, 8],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="四种迭代器适配器，以及 erase-remove 惯用法的三步">
+  <text x="28" y="30" class="svg-title">适配器只改“看到什么、写到哪”，不改容器</text>
+
+  <rect x="28" y="48" width="172" height="84" rx="9" class="svg-box"/>
+  <text x="42" y="72" class="svg-mono" style="font-size:10.5px">reverse_iterator</text>
+  <text x="42" y="94" class="svg-small">++ 翻译成 --</text>
+  <text x="42" y="114" class="svg-small">看到的顺序反过来</text>
+
+  <rect x="208" y="48" width="172" height="84" rx="9" class="svg-box"/>
+  <text x="222" y="72" class="svg-mono" style="font-size:10.5px">back_inserter</text>
+  <text x="222" y="94" class="svg-small">赋值 → push_back</text>
+  <text x="222" y="114" class="svg-small">空容器也能写</text>
+
+  <rect x="388" y="48" width="172" height="84" rx="9" class="svg-box"/>
+  <text x="402" y="72" class="svg-mono" style="font-size:10.5px">ostream_iterator</text>
+  <text x="402" y="94" class="svg-small">赋值 → 输出到流</text>
+  <text x="402" y="114" class="svg-small">写出去，不写容器</text>
+
+  <rect x="568" y="48" width="170" height="84" rx="9" class="svg-box"/>
+  <text x="582" y="72" class="svg-mono" style="font-size:10.5px">move_iterator</text>
+  <text x="582" y="94" class="svg-small">*it → std::move</text>
+  <text x="582" y="114" class="svg-small">搬走，不拷贝</text>
+
+  <text x="28" y="154" class="svg-small">rbegin().base() == v.end()：base 指向当前元素的后一个。</text>
+
+  <line x1="28" y1="168" x2="728" y2="168" stroke="#e2e8f0" stroke-width="1"/>
+
+  <text x="28" y="196" class="svg-small">原 vector</text>
+  <rect x="132" y="182" width="42" height="32" rx="6" class="svg-box"/>
+  <text x="153" y="203" text-anchor="middle" class="svg-mono">1</text>
+  <rect x="178" y="182" width="42" height="32" rx="6" class="svg-box"/>
+  <text x="199" y="203" text-anchor="middle" class="svg-mono">2</text>
+  <rect x="224" y="182" width="42" height="32" rx="6" class="svg-box"/>
+  <text x="245" y="203" text-anchor="middle" class="svg-mono">3</text>
+  <rect x="270" y="182" width="42" height="32" rx="6" class="svg-box"/>
+  <text x="291" y="203" text-anchor="middle" class="svg-mono">2</text>
+  <rect x="316" y="182" width="42" height="32" rx="6" class="svg-box"/>
+  <text x="337" y="203" text-anchor="middle" class="svg-mono">4</text>
+  <rect x="362" y="182" width="42" height="32" rx="6" class="svg-box"/>
+  <text x="383" y="203" text-anchor="middle" class="svg-mono">2</text>
+  <rect x="408" y="182" width="42" height="32" rx="6" class="svg-box"/>
+  <text x="429" y="203" text-anchor="middle" class="svg-mono">5</text>
+  <text x="470" y="203" class="svg-small">size=7</text>
+
+  <text x="28" y="244" class="svg-small">remove 之后</text>
+  <rect x="132" y="230" width="42" height="32" rx="6" class="svg-box-good"/>
+  <text x="153" y="251" text-anchor="middle" class="svg-mono">1</text>
+  <rect x="178" y="230" width="42" height="32" rx="6" class="svg-box-good"/>
+  <text x="199" y="251" text-anchor="middle" class="svg-mono">3</text>
+  <rect x="224" y="230" width="42" height="32" rx="6" class="svg-box-good"/>
+  <text x="245" y="251" text-anchor="middle" class="svg-mono">4</text>
+  <rect x="270" y="230" width="42" height="32" rx="6" class="svg-box-good"/>
+  <text x="291" y="251" text-anchor="middle" class="svg-mono">5</text>
+  <rect x="316" y="230" width="42" height="32" rx="6" class="svg-box-ghost"/>
+  <text x="337" y="248" text-anchor="middle" class="svg-small">无意</text>
+  <text x="337" y="259" text-anchor="middle" class="svg-small">义</text>
+  <rect x="362" y="230" width="42" height="32" rx="6" class="svg-box-ghost"/>
+  <text x="383" y="251" text-anchor="middle" class="svg-small">—</text>
+  <rect x="408" y="230" width="42" height="32" rx="6" class="svg-box-ghost"/>
+  <text x="429" y="251" text-anchor="middle" class="svg-small">—</text>
+  <text x="470" y="251" class="svg-small">size 仍是 7</text>
+
+  <line x1="316" y1="222" x2="316" y2="282" class="svg-arrow-bad"/>
+  <text x="308" y="226" text-anchor="end" class="svg-bad-text" style="font-size:10.5px">newEnd</text>
+
+  <text x="330" y="276" class="svg-mono" style="font-size:10px">erase(newEnd, end)</text>
+
+  <text x="28" y="302" class="svg-small">erase 之后</text>
+  <rect x="132" y="282" width="42" height="32" rx="6" class="svg-box-accent"/>
+  <text x="153" y="303" text-anchor="middle" class="svg-mono">1</text>
+  <rect x="178" y="282" width="42" height="32" rx="6" class="svg-box-accent"/>
+  <text x="199" y="303" text-anchor="middle" class="svg-mono">3</text>
+  <rect x="224" y="282" width="42" height="32" rx="6" class="svg-box-accent"/>
+  <text x="245" y="303" text-anchor="middle" class="svg-mono">4</text>
+  <rect x="270" y="282" width="42" height="32" rx="6" class="svg-box-accent"/>
+  <text x="291" y="303" text-anchor="middle" class="svg-mono">5</text>
+  <text x="330" y="303" class="svg-small">size=4，capacity 不变</text>
+
+  <text x="28" y="340" class="svg-text">remove 只把要留的元素往前挪、返回新的逻辑尾，它不知道容器类型。</text>
+  <text x="28" y="364" class="svg-text">所以固定搭配是 v.erase(std::remove(...), v.end())；erase 才改 size。</text>
+  <text x="28" y="390" class="svg-small">C++20 起 std::erase / std::erase_if 一行搞定，内部还是这套组合。</text>
+</svg>
+`
+  }
+];
+</script>
+<script src="visual.js"></script>
+</body>
+</html>

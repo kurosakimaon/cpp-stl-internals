@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vector：三根指针撑起的动态数组 - C++ 图解</title>
+<link rel="stylesheet" href="visual.css">
+</head>
+<body>
+<div class="container">
+  <div class="top-links">
+    <a class="back-btn" href="index.html">← 图解专区</a>
+    <a class="top-link" href="../stl_internals/index.html">STL 模块</a>
+    <a class="top-link" href="../stl_internals/tutorial.md">模块教程</a>
+    <a class="top-link" href="../index.html">总路线图</a>
+  </div>
+
+  <header class="page-head">
+    <div class="kicker">图解专区 · STL 源码</div>
+    <h1>vector：三根指针撑起的动态数组</h1>
+    <p><code>vector</code> 是 STL 里用得最多的容器，内部却只有三根指针。这一页把这三根指针、翻倍扩容、摊还成本、<code>reserve</code> 与 <code>resize</code> 的区别、<code>move_if_noexcept</code> 的选择、迭代器失效，逐帧画出来，最后落到一个手写的 <code>MiniVector</code>。</p>
+  </header>
+
+  <div class="viz-shell">
+    <div class="stage" id="stage" aria-live="polite"></div>
+    <aside class="side">
+      <div class="step-index" id="counter">1 / 7</div>
+      <h2 id="stepTitle"></h2>
+      <p class="caption" id="caption" aria-live="polite"></p>
+      <div class="code-wrap">
+        <div class="code-label">代码对照</div>
+        <pre class="code"><code id="code"></code></pre>
+      </div>
+    </aside>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-ghost" id="prevBtn" type="button">← 上一步</button>
+    <button class="btn btn-primary" id="nextBtn" type="button">下一步 →</button>
+    <div class="progress"><i id="progressBar"></i></div>
+    <span class="counter" id="stepCountLabel"></span>
+    <button class="btn btn-ghost" id="resetBtn" type="button">重置</button>
+  </div>
+
+  <div class="step-nav" id="steps"></div>
+
+  <p class="page-foot">
+    对应源码：<a href="../stl_internals/02_vector_internals.cpp">02_vector_internals.cpp</a> ·
+    相关教程：<a href="../stl_internals/tutorial.md">stl_internals/tutorial.md</a> ·
+    图中的字节数与扩容序列均取自该文件的注释与本机 g++（libstdc++）实测输出。
+  </p>
+</div>
+
+<script>
+window.STEPS = [
+  {
+    nav: '三根指针',
+    title: '1. 整个 vector，就是三根指针',
+    caption: 'libstdc++ 的 <code>vector</code> 里只有一个 <code>_Vector_impl</code>，里面是三根 <code>T*</code>：<code>_M_start</code> 指向首元素，<code>_M_finish</code> 指向尾后，<code>_M_end_of_storage</code> 指向已分配内存的尾后。于是 <code>size() = finish - start</code>，<code>capacity() = end_of_storage - start</code>。64 位下 <code>sizeof(vector&lt;int&gt;)</code> 就是 24 字节，元素全在堆上。',
+    code: 'T* _M_start;           // 首元素\nT* _M_finish;          // 尾后（最后一个元素的下一个）\nT* _M_end_of_storage;  // 已分配内存的尾后\n\nsize()     = _M_finish - _M_start;\ncapacity() = _M_end_of_storage - _M_start;\nempty()    = _M_start == _M_finish;\ndata()     = _M_start;\n// MSVC 叫 _Myfirst / _Mylast / _Myend，布局一样',
+    highlight: [3, 4],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="vector 的三根指针与 size、capacity 的关系">
+  <text x="28" y="32" class="svg-title">一个 vector 对象 = 三个指针 = 24 字节</text>
+
+  <rect x="28" y="54" width="704" height="78" rx="12" class="svg-field"/>
+  <text x="46" y="76" class="svg-small">vector&lt;int&gt; v 对象本身（栈上，sizeof = 24）</text>
+
+  <rect x="46" y="88" width="150" height="34" rx="8" class="svg-box-accent"/>
+  <text x="121" y="110" text-anchor="middle" class="svg-mono" style="font-size:11px">_M_start</text>
+
+  <rect x="206" y="88" width="150" height="34" rx="8" class="svg-box-accent"/>
+  <text x="281" y="110" text-anchor="middle" class="svg-mono" style="font-size:11px">_M_finish</text>
+
+  <rect x="366" y="88" width="200" height="34" rx="8" class="svg-box-accent"/>
+  <text x="466" y="110" text-anchor="middle" class="svg-mono" style="font-size:11px">_M_end_of_storage</text>
+
+  <text x="586" y="110" class="svg-small">3 × 8 = 24 字节</text>
+
+  <rect x="28" y="160" width="704" height="98" rx="12" fill="#fff" stroke="#e2e8f0"/>
+  <text x="46" y="182" class="svg-small">堆上的那块内存（capacity 个槽位）</text>
+
+  <rect x="46" y="196" width="64" height="46" rx="6" class="svg-box"><text x="78" y="225" text-anchor="middle" class="svg-mono">1</text></rect>
+  <rect x="110" y="196" width="64" height="46" rx="6" class="svg-box"><text x="142" y="225" text-anchor="middle" class="svg-mono">2</text></rect>
+  <rect x="174" y="196" width="64" height="46" rx="6" class="svg-box"><text x="206" y="225" text-anchor="middle" class="svg-mono">3</text></rect>
+  <rect x="238" y="196" width="64" height="46" rx="6" class="svg-box-ghost"/>
+  <rect x="302" y="196" width="64" height="46" rx="6" class="svg-box-ghost"/>
+  <rect x="366" y="196" width="64" height="46" rx="6" class="svg-box-ghost"/>
+
+  <text x="270" y="266" text-anchor="middle" class="svg-small">已构造：size = 3</text>
+  <text x="430" y="266" text-anchor="middle" class="svg-small">未构造的空槽位</text>
+
+  <line x1="121" y1="122" x2="60" y2="192" class="svg-arrow-accent"/>
+  <line x1="281" y1="122" x2="240" y2="192" class="svg-arrow-accent"/>
+  <line x1="466" y1="122" x2="430" y2="196" class="svg-arrow-accent"/>
+
+  <path d="M46 286 L238 286" class="svg-arrow-bad"/>
+  <text x="142" y="306" text-anchor="middle" class="svg-bad-text" style="font-size:11.5px">size() = finish - start = 3</text>
+
+  <path d="M46 334 L430 334" class="svg-arrow"/>
+  <text x="238" y="354" text-anchor="middle" class="svg-mono" style="font-size:11px">capacity() = end_of_storage - start = 6</text>
+
+  <text x="470" y="286" class="svg-text">相邻元素差 1 个 int，</text>
+  <text x="470" y="308" class="svg-text">所以指针相减直接得到元素个数。</text>
+
+  <text x="28" y="386" class="svg-small">size 是“住了几个”，capacity 是“能住几个”；超出 size 的槽位没有对象，访问就是 UB。</text>
+</svg>
+`
+  },
+  {
+    nav: '翻倍扩容',
+    title: '2. 满了怎么办：申请两倍，搬完再释放',
+    caption: '容量满时 <code>push_back</code> 会申请一块两倍大的新内存，把旧元素逐个搬到新块，析构旧元素、释放旧内存，最后才更新三根指针。libstdc++ 实测插入 40 个元素，容量序列是 <strong>1、2、4、8、16、32、64</strong>，最终 size=40、capacity=64，浪费 24 个槽位。',
+    code: 'if (_M_finish == _M_end_of_storage) {\n    const size_type n = size();\n    const size_type len = n ? n * 2 : 1;  // 2 倍\n    pointer tmp = _M_allocate(len);\n    // 把 [start, finish) 搬到 tmp\n    _M_allocate_and_copy(len, start, finish);\n    destroy(start, finish);      // 析构旧元素\n    deallocate(start, capacity); // 释放旧块\n    _M_start = tmp;\n    _M_finish = tmp + n;\n    _M_end_of_storage = tmp + len;\n}',
+    highlight: [2, 3, 5, 8],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="push_back 触发扩容时旧块搬到两倍大的新块">
+  <text x="28" y="32" class="svg-title">v 已有 4 个元素、capacity=4，再 push_back 一个</text>
+
+  <rect x="28" y="56" width="330" height="120" rx="12" fill="#fef2f2" stroke="#ef4444" stroke-width="1.6"/>
+  <text x="46" y="78" class="svg-bad-text" style="font-size:12px">旧块 capacity = 4</text>
+
+  <rect x="46" y="88" width="60" height="44" rx="6" class="svg-box"><text x="76" y="116" text-anchor="middle" class="svg-mono">1</text></rect>
+  <rect x="106" y="88" width="60" height="44" rx="6" class="svg-box"><text x="136" y="116" text-anchor="middle" class="svg-mono">2</text></rect>
+  <rect x="166" y="88" width="60" height="44" rx="6" class="svg-box"><text x="196" y="116" text-anchor="middle" class="svg-mono">3</text></rect>
+  <rect x="226" y="88" width="60" height="44" rx="6" class="svg-box"><text x="256" y="116" text-anchor="middle" class="svg-mono">4</text></rect>
+
+  <text x="46" y="158" class="svg-small">start … finish … end_of_storage 全指向这块</text>
+
+  <text x="366" y="112" class="svg-small">① 申请 8 槽</text>
+  <line x1="362" y1="126" x2="440" y2="126" class="svg-arrow-accent svg-flow"/>
+  <text x="366" y="146" class="svg-small">② 逐个搬过去</text>
+
+  <rect x="452" y="56" width="280" height="120" rx="12" fill="#ecfdf5" stroke="#10b981" stroke-width="1.8"/>
+  <text x="470" y="78" class="svg-good-text" style="font-size:12px">新块 capacity = 8</text>
+
+  <rect x="468" y="88" width="54" height="44" rx="6" class="svg-box-good"><text x="495" y="116" text-anchor="middle" class="svg-mono">1</text></rect>
+  <rect x="522" y="88" width="54" height="44" rx="6" class="svg-box-good"><text x="549" y="116" text-anchor="middle" class="svg-mono">2</text></rect>
+  <rect x="576" y="88" width="54" height="44" rx="6" class="svg-box-good"><text x="603" y="116" text-anchor="middle" class="svg-mono">3</text></rect>
+  <rect x="630" y="88" width="54" height="44" rx="6" class="svg-box-good"><text x="657" y="116" text-anchor="middle" class="svg-mono">4</text></rect>
+  <rect x="684" y="88" width="32" height="44" rx="6" class="svg-box-accent svg-pulse"/>
+
+  <text x="470" y="158" class="svg-small">新元素落在第 5 个槽位（紫色）</text>
+
+  <rect x="28" y="204" width="704" height="126" rx="12" class="svg-field"/>
+  <text x="46" y="228" class="svg-title">扩容四步：顺序不能反</text>
+  <text x="46" y="256" class="svg-text">1. 申请一块 2 倍大的新内存</text>
+  <text x="46" y="282" class="svg-text">2. 把 [start, finish) 的元素搬到新块</text>
+
+  <text x="396" y="256" class="svg-text">3. 析构旧元素，释放旧块</text>
+  <text x="396" y="282" class="svg-text">4. 更新 start / finish / end_of_storage</text>
+  <text x="396" y="308" class="svg-good-text" style="font-size:12px">旧块已还给分配器，旧迭代器全部悬空。</text>
+
+  <text x="28" y="362" class="svg-small">插入 40 个 int，容量序列 1、2、4、8、16、32、64；最后 size=40、capacity=64，空着 24 个槽位。</text>
+  <text x="28" y="386" class="svg-small">MSVC 按约 1.5 倍长，序列不同，但“搬旧、释放旧、更新指针”的道理一样。</text>
+</svg>
+`
+  },
+  {
+    nav: '摊还成本',
+    title: '3. 单次 O(n)，摊还是 O(1)',
+    caption: '每次扩容都要搬 n 个元素，那一次 <code>push_back</code> 是 O(n)。但 2 倍增长让搬运总量成为 1+2+4+…+2^k，合计小于 2n：插入 40 个元素，累计复制 63 次，正好 1+2+4+8+16+32。总量被前面的插入摊薄，平均到每一次仍是 <code>O(1)</code>。',
+    code: '// 2 倍增长下，n 次 push_back 的搬运总量：\n// 1 + 2 + 4 + … + 2^k < 2n\n//\n// 插入 40 个元素，实测复制次数：\n//   1 + 2 + 4 + 8 + 16 + 32 = 63 次\n//   63 < 2 * 40 = 80\n//\n// 单次最坏 O(n)，摊还 O(1)',
+    highlight: [3, 4],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="扩容时复制次数的阶梯图，总量 63 小于 80">
+  <text x="28" y="32" class="svg-title">每次扩容搬多少：插入 40 个元素，累计复制 63 次</text>
+
+  <line x1="140" y1="300" x2="706" y2="300" class="svg-arrow"/>
+  <line x1="140" y1="300" x2="140" y2="56" class="svg-arrow"/>
+  <text x="132" y="50" text-anchor="end" class="svg-small">复制次数</text>
+
+  <line x1="140" y1="290" x2="680" y2="290" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="132" y="294" text-anchor="end" class="svg-small">1</text>
+  <line x1="140" y1="280" x2="680" y2="280" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="132" y="284" text-anchor="end" class="svg-small">2</text>
+  <line x1="140" y1="260" x2="680" y2="260" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="132" y="264" text-anchor="end" class="svg-small">4</text>
+  <line x1="140" y1="220" x2="680" y2="220" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="132" y="224" text-anchor="end" class="svg-small">8</text>
+
+  <rect x="176" y="290" width="64" height="10" rx="3" class="svg-box-accent"/>
+  <text x="208" y="280" text-anchor="middle" class="svg-mono">1</text>
+
+  <rect x="262" y="280" width="64" height="20" rx="3" class="svg-box-accent"/>
+  <text x="294" y="270" text-anchor="middle" class="svg-mono">2</text>
+
+  <rect x="348" y="260" width="64" height="40" rx="3" class="svg-box-accent"/>
+  <text x="380" y="250" text-anchor="middle" class="svg-mono">4</text>
+
+  <rect x="434" y="220" width="64" height="80" rx="3" class="svg-box-accent"/>
+  <text x="466" y="210" text-anchor="middle" class="svg-mono">8</text>
+
+  <rect x="520" y="140" width="64" height="160" rx="3" class="svg-box-accent"/>
+  <text x="552" y="130" text-anchor="middle" class="svg-mono">16</text>
+
+  <rect x="606" y="60" width="64" height="240" rx="3" class="svg-box-warn"/>
+  <text x="638" y="50" text-anchor="middle" class="svg-mono">32</text>
+
+  <text x="208" y="320" text-anchor="middle" class="svg-small">1</text>
+  <text x="294" y="320" text-anchor="middle" class="svg-small">2</text>
+  <text x="380" y="320" text-anchor="middle" class="svg-small">4</text>
+  <text x="466" y="320" text-anchor="middle" class="svg-small">8</text>
+  <text x="552" y="320" text-anchor="middle" class="svg-small">16</text>
+  <text x="638" y="320" text-anchor="middle" class="svg-small">32</text>
+  <text x="380" y="342" text-anchor="middle" class="svg-small">扩容前的容量 → 触发扩容的元素个数</text>
+
+  <text x="28" y="374" class="svg-good-text" style="font-size:12.5px">1 + 2 + 4 + 8 + 16 + 32 = 63 次复制</text>
+  <text x="28" y="398" class="svg-text" style="font-size:12px">63 &lt; 2 × 40 = 80：总量被 n 次插入摊薄，平均每次不到 2 次，所以摊还 O(1)。</text>
+</svg>
+`
+  },
+  {
+    nav: '借地与盖房',
+    title: '4. reserve 只借地，resize 才盖房',
+    caption: '<code>reserve(10)</code> 后 <code>size=0</code>、<code>capacity=10</code>，一个元素也没构造；<code>resize(10)</code> 后 <code>size=10</code>，10 个元素已经默认构造好。所以 <code>reserve</code> 之后不能写 <code>v[0]</code>——那里还没有对象。反过来，先 <code>reserve(10)</code> 再插 10 个，capacity 一直是 10，一次都不搬。',
+    code: 'vector<int> a;\na.reserve(10);   // size=0，capacity=10，没构造元素\n\nvector<int> b;\nb.resize(10);    // size=10，capacity=10，10 个元素已构造\nb.push_back(11); // 刚好超容量 → capacity 翻到 20\n\nvector<int> c;\nc.reserve(10);\nfor (int i = 0; i < 10; ++i) c.push_back(i);\n// capacity 一直是 10，没有扩容',
+    highlight: [1, 4, 5, 9],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="reserve 只改容量，resize 会构造元素">
+  <text x="28" y="32" class="svg-title">a.reserve(10) 与 b.resize(10)：容量一样，元素个数不一样</text>
+
+  <rect x="28" y="48" width="344" height="158" rx="12" fill="#fff" stroke="#e2e8f0"/>
+  <text x="46" y="72" class="svg-good-text" style="font-size:12px">a.reserve(10)　size = 0，capacity = 10</text>
+
+  <rect x="46" y="86" width="28" height="34" class="svg-box-ghost"/>
+  <rect x="74" y="86" width="28" height="34" class="svg-box-ghost"/>
+  <rect x="102" y="86" width="28" height="34" class="svg-box-ghost"/>
+  <rect x="130" y="86" width="28" height="34" class="svg-box-ghost"/>
+  <rect x="158" y="86" width="28" height="34" class="svg-box-ghost"/>
+  <rect x="186" y="86" width="28" height="34" class="svg-box-ghost"/>
+  <rect x="214" y="86" width="28" height="34" class="svg-box-ghost"/>
+  <rect x="242" y="86" width="28" height="34" class="svg-box-ghost"/>
+  <rect x="270" y="86" width="28" height="34" class="svg-box-ghost"/>
+  <rect x="298" y="86" width="28" height="34" class="svg-box-ghost"/>
+
+  <text x="60" y="108" text-anchor="middle" class="svg-small">空</text>
+  <text x="326" y="150" text-anchor="end" class="svg-small">10 个槽位都没构造对象</text>
+
+  <text x="46" y="168" class="svg-bad-text" style="font-size:11.5px">start = finish</text>
+  <text x="46" y="190" class="svg-small">start 与 finish 停在同一个位置，end_of_storage 在最右。</text>
+
+  <rect x="388" y="48" width="344" height="158" rx="12" fill="#fff" stroke="#e2e8f0"/>
+  <text x="406" y="72" class="svg-good-text" style="font-size:12px">b.resize(10)　size = 10，capacity = 10</text>
+
+  <rect x="406" y="86" width="28" height="34" class="svg-box-good"><text x="420" y="108" text-anchor="middle" class="svg-mono">0</text></rect>
+  <rect x="434" y="86" width="28" height="34" class="svg-box-good"><text x="448" y="108" text-anchor="middle" class="svg-mono">0</text></rect>
+  <rect x="462" y="86" width="28" height="34" class="svg-box-good"><text x="476" y="108" text-anchor="middle" class="svg-mono">0</text></rect>
+  <rect x="490" y="86" width="28" height="34" class="svg-box-good"><text x="504" y="108" text-anchor="middle" class="svg-mono">0</text></rect>
+  <rect x="518" y="86" width="28" height="34" class="svg-box-good"><text x="532" y="108" text-anchor="middle" class="svg-mono">0</text></rect>
+  <rect x="546" y="86" width="28" height="34" class="svg-box-good"><text x="560" y="108" text-anchor="middle" class="svg-mono">0</text></rect>
+  <rect x="574" y="86" width="28" height="34" class="svg-box-good"><text x="588" y="108" text-anchor="middle" class="svg-mono">0</text></rect>
+  <rect x="602" y="86" width="28" height="34" class="svg-box-good"><text x="616" y="108" text-anchor="middle" class="svg-mono">0</text></rect>
+  <rect x="630" y="86" width="28" height="34" class="svg-box-good"><text x="644" y="108" text-anchor="middle" class="svg-mono">0</text></rect>
+  <rect x="658" y="86" width="28" height="34" class="svg-box-good"><text x="672" y="108" text-anchor="middle" class="svg-mono">0</text></rect>
+
+  <text x="406" y="168" class="svg-good-text" style="font-size:11.5px">start … finish 跨过 10 个元素</text>
+  <text x="406" y="190" class="svg-small">finish 与 end_of_storage 重合，容量已经用满。</text>
+
+  <rect x="28" y="222" width="704" height="76" rx="12" class="svg-box-warn"/>
+  <text x="48" y="248" class="svg-text">b.push_back(11)：size 从 10 变 11，超出 capacity，于是容量翻倍到 20 并搬家。</text>
+  <text x="48" y="274" class="svg-small">c 先 reserve(10) 再 push 10 个：capacity 一直是 10，一次扩容都没发生。</text>
+
+  <text x="28" y="336" class="svg-text">一句话区分：reserve 动的是 end_of_storage，resize 动的是 finish。</text>
+  <text x="28" y="362" class="svg-text">所以 reserve 之后 v[0] 还不能写——那里没有对象，读或写都是 UB。</text>
+  <text x="28" y="392" class="svg-small">reserve 是唯一能提前控制扩容的手段：知道大概要装多少，就先借够地方。</text>
+</svg>
+`
+  },
+  {
+    nav: '移动或拷贝',
+    title: '5. move_if_noexcept：不抛异常才敢移动',
+    caption: '扩容要把旧元素搬到新内存，用移动还是拷贝？标准库的答案是 <code>move_if_noexcept</code>：移动构造标了 <code>noexcept</code> 就移动，否则退回拷贝。源码里实测：<code>ThrowingMove</code> 扩容搬 2 个旧元素，拷贝 2 次、移动 0 次；<code>NoThrowMove</code> 则是拷贝 0 次、移动 2 次。',
+    code: 'struct ThrowingMove {\n    ThrowingMove(ThrowingMove&&) noexcept(false); // 可能抛\n};\nstruct NoThrowMove {\n    NoThrowMove(NoThrowMove&&) noexcept;          // 承诺不抛\n};\n\n// 两者都 reserve(2)、装 2 个、再 emplace 1 个：\n// ThrowingMove → 拷贝 2 次，移动 0 次\n// NoThrowMove  → 拷贝 0 次，移动 2 次',
+    highlight: [1, 4, 8, 9],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="move_if_noexcept 按 noexcept 分成移动与拷贝两条路径">
+  <text x="28" y="32" class="svg-title">扩容搬 2 个旧元素：noexcept 决定走哪条路</text>
+
+  <rect x="28" y="50" width="340" height="232" rx="12" fill="#fef2f2" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="46" y="74" class="svg-bad-text" style="font-size:12px">移动构造 noexcept(false)</text>
+
+  <text x="46" y="100" class="svg-small">旧块：capacity = 2，已装 2 个</text>
+  <rect x="46" y="110" width="52" height="34" rx="5" class="svg-box"><text x="72" y="132" text-anchor="middle" class="svg-mono">1</text></rect>
+  <rect x="98" y="110" width="52" height="34" rx="5" class="svg-box"><text x="124" y="132" text-anchor="middle" class="svg-mono">2</text></rect>
+
+  <line x1="98" y1="148" x2="98" y2="190" class="svg-arrow-bad svg-flow"/>
+  <text x="110" y="174" class="svg-bad-text" style="font-size:11.5px">退回拷贝</text>
+
+  <text x="46" y="208" class="svg-small">新块：capacity = 4</text>
+  <rect x="46" y="218" width="52" height="34" rx="5" class="svg-box"><text x="72" y="240" text-anchor="middle" class="svg-mono">1</text></rect>
+  <rect x="98" y="218" width="52" height="34" rx="5" class="svg-box"><text x="124" y="240" text-anchor="middle" class="svg-mono">2</text></rect>
+  <rect x="150" y="218" width="52" height="34" rx="5" class="svg-box-accent"><text x="176" y="240" text-anchor="middle" class="svg-mono">3</text></rect>
+
+  <text x="222" y="240" class="svg-bad-text" style="font-size:11.5px">拷贝 2 次，移动 0 次</text>
+
+  <rect x="392" y="50" width="340" height="232" rx="12" fill="#ecfdf5" stroke="#10b981" stroke-width="1.5"/>
+  <text x="410" y="74" class="svg-good-text" style="font-size:12px">移动构造 noexcept(true)</text>
+
+  <text x="410" y="100" class="svg-small">旧块：capacity = 2，已装 2 个</text>
+  <rect x="410" y="110" width="52" height="34" rx="5" class="svg-box"><text x="436" y="132" text-anchor="middle" class="svg-mono">1</text></rect>
+  <rect x="462" y="110" width="52" height="34" rx="5" class="svg-box"><text x="488" y="132" text-anchor="middle" class="svg-mono">2</text></rect>
+
+  <line x1="462" y1="148" x2="462" y2="190" class="svg-arrow-accent svg-flow"/>
+  <text x="474" y="174" class="svg-good-text" style="font-size:11.5px">放心移动</text>
+
+  <text x="410" y="208" class="svg-small">新块：capacity = 4</text>
+  <rect x="410" y="218" width="52" height="34" rx="5" class="svg-box"><text x="436" y="240" text-anchor="middle" class="svg-mono">1</text></rect>
+  <rect x="462" y="218" width="52" height="34" rx="5" class="svg-box"><text x="488" y="240" text-anchor="middle" class="svg-mono">2</text></rect>
+  <rect x="514" y="218" width="52" height="34" rx="5" class="svg-box-accent"><text x="540" y="240" text-anchor="middle" class="svg-mono">3</text></rect>
+
+  <text x="586" y="240" class="svg-good-text" style="font-size:11.5px">拷贝 0 次，移动 2 次</text>
+
+  <rect x="28" y="300" width="704" height="92" rx="12" class="svg-box"/>
+  <text x="48" y="326" class="svg-text">为什么要这么保守：移动途中若抛出异常，旧元素可能已被搬走一半，旧 vector 不再完整。</text>
+  <text x="48" y="352" class="svg-text">拷贝不会破坏源对象，失败时原容器原封不动，这就是强异常安全。</text>
+  <text x="48" y="378" class="svg-good-text" style="font-size:12px">所以移动构造上的 noexcept 不是可有可无的装饰，它决定扩容走快路还是慢路。</text>
+</svg>
+`
+  },
+  {
+    nav: '失效区间',
+    title: '6. 扩容一搬家，旧地址上的一切作废',
+    caption: '扩容后元素住进了新内存，旧的指针、引用、迭代器全部指向已经释放的旧块，这就是“迭代器失效”的本质。源码里只比较地址、不解引用：<code>push_back(99)</code> 之后 <code>oldData != v.data()</code>，判定为“地址变了”；而先 <code>reserve(8)</code> 再插满 8 个，地址始终没变。',
+    code: 'vector<int> v{1, 2, 3};\nconst int* oldData = v.data();\n// 填到 capacity，再 push_back 一个：\nv.push_back(99);            // 触发扩容\n// 旧 data 与新 data 不同 → 旧指针/迭代器/引用全失效\n\nvector<int> w;\nw.reserve(8);\nconst int* p = w.data();\n// 再插 8 个：p == w.data() 仍为 true，没有搬家',
+    highlight: [3, 4, 8, 9],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="扩容导致全部迭代器失效，未扩容只影响插入点之后">
+  <text x="28" y="32" class="svg-title">失效范围：扩容是全废，中间插入只废一半</text>
+
+  <rect x="28" y="48" width="340" height="170" rx="12" fill="#fef2f2" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="46" y="72" class="svg-bad-text" style="font-size:12px">push_back 触发扩容</text>
+
+  <text x="46" y="98" class="svg-small">旧 data（扩容后被释放）</text>
+  <rect x="46" y="108" width="44" height="34" rx="5" class="svg-box-bad"><text x="68" y="130" text-anchor="middle" class="svg-mono">1</text></rect>
+  <rect x="90" y="108" width="44" height="34" rx="5" class="svg-box-bad"><text x="112" y="130" text-anchor="middle" class="svg-mono">2</text></rect>
+  <rect x="134" y="108" width="44" height="34" rx="5" class="svg-box-bad"><text x="156" y="130" text-anchor="middle" class="svg-mono">3</text></rect>
+
+  <line x1="44" y1="106" x2="180" y2="144" class="svg-cross"/>
+  <line x1="180" y1="106" x2="44" y2="144" class="svg-cross"/>
+
+  <text x="200" y="132" class="svg-bad-text" style="font-size:11.5px">旧指针 / 迭代器 / 引用</text>
+  <text x="200" y="150" class="svg-small">全部失效，解引用就是 UB。</text>
+
+  <line x1="46" y1="164" x2="340" y2="164" stroke="#fca5a5" stroke-width="1"/>
+  <text x="46" y="188" class="svg-text" style="font-size:12px">元素搬到新块，旧块还给分配器，</text>
+  <text x="46" y="208" class="svg-text" style="font-size:12px">地址变了，就没有“旧迭代器”这回事了。</text>
+
+  <rect x="392" y="48" width="340" height="170" rx="12" fill="#fff7ed" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="410" y="72" class="svg-bad-text" style="font-size:12px;fill:#b45309">中间 insert / erase（未扩容）</text>
+
+  <text x="410" y="98" class="svg-small">有效区</text>
+  <text x="586" y="98" class="svg-small">失效区（插入点之后）</text>
+
+  <rect x="410" y="108" width="44" height="34" rx="5" class="svg-box-good"><text x="432" y="130" text-anchor="middle" class="svg-mono">1</text></rect>
+  <rect x="454" y="108" width="44" height="34" rx="5" class="svg-box-good"><text x="476" y="130" text-anchor="middle" class="svg-mono">2</text></rect>
+  <rect x="498" y="108" width="44" height="34" rx="5" class="svg-box-bad"><text x="520" y="130" text-anchor="middle" class="svg-mono">3</text></rect>
+  <rect x="542" y="108" width="44" height="34" rx="5" class="svg-box-bad"><text x="564" y="130" text-anchor="middle" class="svg-mono">4</text></rect>
+  <rect x="586" y="108" width="44" height="34" rx="5" class="svg-box-bad"><text x="608" y="130" text-anchor="middle" class="svg-mono">5</text></rect>
+
+  <line x1="496" y1="84" x2="496" y2="158" class="svg-arrow-bad"/>
+  <text x="500" y="80" class="svg-bad-text" style="font-size:10.5px">插入点</text>
+
+  <text x="410" y="188" class="svg-text" style="font-size:12px">插入点之前的元素没有动，引用仍有效；</text>
+  <text x="410" y="208" class="svg-text" style="font-size:12px">从插入点往后，位置和地址都可能变。</text>
+
+  <rect x="28" y="232" width="704" height="160" rx="12" class="svg-box"/>
+  <text x="46" y="258" class="svg-title">失效规则速查</text>
+
+  <text x="46" y="286" class="svg-mono" style="font-size:11.5px">push_back 未扩容</text>
+  <text x="300" y="286" class="svg-text" style="font-size:12px">只有 end() 变，其他迭代器 / 引用有效</text>
+
+  <text x="46" y="310" class="svg-mono" style="font-size:11.5px">push_back 触发扩容</text>
+  <text x="300" y="310" class="svg-bad-text" style="font-size:12px">全部失效</text>
+
+  <text x="46" y="334" class="svg-mono" style="font-size:11.5px">insert / erase 中间</text>
+  <text x="300" y="334" class="svg-text" style="font-size:12px">插入 / 删除点及之后失效</text>
+
+  <text x="46" y="358" class="svg-mono" style="font-size:11.5px">reserve 后容量够</text>
+  <text x="300" y="358" class="svg-good-text" style="font-size:12px">后续 push_back 不搬家，引用保持有效</text>
+
+  <text x="46" y="382" class="svg-small">实战：循环里别提前存迭代器 —— 先 reserve，或用下标，或每轮重新取 begin() / end()。</text>
+</svg>
+`
+  },
+  {
+    nav: '手写容器',
+    title: '7. 手写 MiniVector：把三件套落到实处',
+    caption: 'MiniVector 只用 <code>std::allocator</code> 和 <code>allocator_traits::construct</code>，私有成员就是 <code>begin_ / end_ / cap_</code> 三根指针。<code>push_back</code> 发现 <code>end_ == cap_</code> 就 <code>reserve(capacity() ? capacity() * 2 : 1)</code>，然后原地构造、<code>++end_</code>。插 10 个元素，capacity 按 1、2、4、8、16 长，首元素地址每次都换。',
+    code: 'template <class T>\nclass MiniVector {\n    T* begin_ = nullptr;\n    T* end_   = nullptr;\n    T* cap_   = nullptr;\n\n    void push_back(const T& value) {\n        if (end_ == cap_)\n            reserve(capacity() ? capacity() * 2 : 1);\n        Traits::construct(alloc_, end_, value);\n        ++end_;\n    }\n    T& operator[](size_t i) { return begin_[i]; }\n};',
+    highlight: [2, 3, 4, 6, 7, 8],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="MiniVector 的三根指针成员与 reserve 扩容流程">
+  <text x="28" y="32" class="svg-title">MiniVector：三个指针 + 一个 reserve，够用了</text>
+
+  <rect x="28" y="48" width="330" height="200" rx="12" class="svg-box"/>
+  <text x="46" y="72" class="svg-title">私有成员（就是那三件套）</text>
+
+  <rect x="46" y="84" width="150" height="32" rx="6" class="svg-box-accent"/>
+  <text x="58" y="105" class="svg-mono" style="font-size:11px">begin_</text>
+  <text x="188" y="105" text-anchor="end" class="svg-small">T*</text>
+
+  <rect x="46" y="120" width="150" height="32" rx="6" class="svg-box-accent"/>
+  <text x="58" y="141" class="svg-mono" style="font-size:11px">end_</text>
+  <text x="188" y="141" text-anchor="end" class="svg-small">T*</text>
+
+  <rect x="46" y="156" width="150" height="32" rx="6" class="svg-box-accent"/>
+  <text x="58" y="177" class="svg-mono" style="font-size:11px">cap_</text>
+  <text x="188" y="177" text-anchor="end" class="svg-small">T*</text>
+
+  <text x="46" y="212" class="svg-small">Alloc alloc_ 只管借还内存，</text>
+  <text x="46" y="232" class="svg-small">构造 / 析构交给 traits。</text>
+
+  <text x="212" y="96" class="svg-mono" style="font-size:11px">size()</text>
+  <text x="212" y="118" class="svg-mono" style="font-size:11px">capacity()</text>
+  <text x="212" y="140" class="svg-mono" style="font-size:11px">operator[]</text>
+  <text x="212" y="162" class="svg-mono" style="font-size:11px">reserve(n)</text>
+  <text x="212" y="184" class="svg-mono" style="font-size:11px">push_back</text>
+  <text x="212" y="206" class="svg-mono" style="font-size:11px">pop_back</text>
+  <text x="212" y="228" class="svg-mono" style="font-size:11px">clear()</text>
+
+  <rect x="376" y="48" width="356" height="200" rx="12" class="svg-field"/>
+  <text x="394" y="72" class="svg-title">reserve(n)：一次扩容的完整动作</text>
+  <text x="394" y="98" class="svg-text" style="font-size:11.5px">1. n &lt;= capacity() 直接返回</text>
+  <text x="394" y="124" class="svg-text" style="font-size:11.5px">2. allocate(n)，得到 newBegin</text>
+  <text x="394" y="150" class="svg-text" style="font-size:11.5px">3. 逐个 construct，搬 move_if_noexcept(*p)</text>
+  <text x="394" y="176" class="svg-text" style="font-size:11.5px">4. 析构旧元素，deallocate 旧块</text>
+  <text x="394" y="202" class="svg-text" style="font-size:11.5px">5. begin_ / end_ / cap_ 一起换成新值</text>
+  <text x="394" y="232" class="svg-good-text" style="font-size:11px">push_back 里：满了就 reserve(cap ? cap * 2 : 1)</text>
+
+  <rect x="28" y="264" width="704" height="128" rx="12" class="svg-box-accent"/>
+  <text x="46" y="288" class="svg-title">插入 10 个元素，capacity 走一遍 1 → 2 → 4 → 8 → 16</text>
+
+  <rect x="46" y="302" width="118" height="42" rx="8" class="svg-box-good"/>
+  <text x="105" y="328" text-anchor="middle" class="svg-mono" style="font-size:11px">第 1 个 → 1</text>
+
+  <rect x="174" y="302" width="118" height="42" rx="8" class="svg-box-good"/>
+  <text x="233" y="328" text-anchor="middle" class="svg-mono" style="font-size:11px">第 2 个 → 2</text>
+
+  <rect x="302" y="302" width="118" height="42" rx="8" class="svg-box-good"/>
+  <text x="361" y="328" text-anchor="middle" class="svg-mono" style="font-size:11px">第 3 个 → 4</text>
+
+  <rect x="430" y="302" width="118" height="42" rx="8" class="svg-box-good"/>
+  <text x="489" y="328" text-anchor="middle" class="svg-mono" style="font-size:11px">第 5 个 → 8</text>
+
+  <rect x="558" y="302" width="118" height="42" rx="8" class="svg-box-good"/>
+  <text x="617" y="328" text-anchor="middle" class="svg-mono" style="font-size:11px">第 9 个 → 16</text>
+
+  <text x="46" y="368" class="svg-small">每次容量翻倍都对应一次搬家：首元素地址随之改变，之前存的引用自然不能再用。</text>
+  <text x="46" y="386" class="svg-small">pop_back + clear 后 size=0，capacity 仍是 16；析构时才 deallocate 这块容量。</text>
+</svg>
+`
+  }
+];
+</script>
+<script src="visual.js"></script>
+</body>
+</html>

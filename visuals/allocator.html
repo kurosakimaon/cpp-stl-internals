@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>配置器：容器脚下的那块地 - C++ 图解</title>
+<link rel="stylesheet" href="visual.css">
+</head>
+<body>
+<div class="container">
+  <div class="top-links">
+    <a class="back-btn" href="index.html">← 图解专区</a>
+    <a class="top-link" href="../stl_internals/index.html">STL 模块</a>
+    <a class="top-link" href="../stl_internals/tutorial.md">模块教程</a>
+    <a class="top-link" href="../index.html">总路线图</a>
+  </div>
+
+  <header class="page-head">
+    <div class="kicker">图解专区 · STL 源码</div>
+    <h1>配置器：容器脚下的那块地</h1>
+    <p><code>vector</code> 扩容要搬家，<code>list</code> 的节点很胖，<code>map</code> 插入 5 个 int 却要了 200 字节——这些问题的答案都藏在容器模板的最后一个参数里。这一页把六大组件的位置、<code>allocate</code> 与 <code>construct</code> 的拆开、<code>allocator_traits</code> 的门面、<code>rebind</code> 的节点开销，以及 C++17 的 <code>pmr</code> 逐帧画出来。</p>
+  </header>
+
+  <div class="viz-shell">
+    <div class="stage" id="stage" aria-live="polite"></div>
+    <aside class="side">
+      <div class="step-index" id="counter">1 / 6</div>
+      <h2 id="stepTitle"></h2>
+      <p class="caption" id="caption" aria-live="polite"></p>
+      <div class="code-wrap">
+        <div class="code-label">代码对照</div>
+        <pre class="code"><code id="code"></code></pre>
+      </div>
+    </aside>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-ghost" id="prevBtn" type="button">← 上一步</button>
+    <button class="btn btn-primary" id="nextBtn" type="button">下一步 →</button>
+    <div class="progress"><i id="progressBar"></i></div>
+    <span class="counter" id="stepCountLabel"></span>
+    <button class="btn btn-ghost" id="resetBtn" type="button">重置</button>
+  </div>
+
+  <div class="step-nav" id="steps"></div>
+
+  <p class="page-foot">
+    对应源码：<a href="../stl_internals/01_allocator_traits.cpp">01_allocator_traits.cpp</a> ·
+    相关教程：<a href="../stl_internals/tutorial.md">stl_internals/tutorial.md</a> ·
+    图中的分配次数与字节数来自该文件里 CountingAlloc 的实测输出。
+  </p>
+</div>
+
+<script>
+window.STEPS = [
+  {
+    nav: '六大组件',
+    title: '1. 六大组件：配置器在最底下，托着所有人',
+    caption: '容器、算法、迭代器、仿函数、适配器、配置器——前五个你天天见，第六个藏在容器模板参数的最后一位：<code>template&lt;class T, class Alloc = allocator&lt;T&gt;&gt; class vector;</code>。平时不写，不代表它不存在：每个节点、每块缓冲区都要经过它的手。',
+    code: 'container  → 存：vector / list / deque / map\nalgorithm  → 算：sort / find / transform\niterator   → 连：begin/end、类别标签\nfunctor    → 策略：less / greater / hash\nadapter    → 改接口：stack / reverse_iterator\nallocator  → 管内存：allocate / deallocate',
+    highlight: [5],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="STL 六大组件的依赖链，配置器在最底层">
+  <text x="28" y="32" class="svg-title">六个组件，一条依赖链</text>
+
+  <line x1="163" y1="110" x2="163" y2="122" class="svg-arrow"/>
+  <line x1="163" y1="168" x2="163" y2="180" class="svg-arrow"/>
+  <line x1="163" y1="226" x2="163" y2="238" class="svg-arrow"/>
+  <line x1="163" y1="284" x2="163" y2="296" class="svg-arrow"/>
+  <line x1="163" y1="342" x2="163" y2="354" class="svg-arrow"/>
+
+  <rect x="28" y="64" width="270" height="46" rx="9" class="svg-box"/>
+  <text x="44" y="84" class="svg-text">容器 container</text>
+  <text x="44" y="101" class="svg-small">存数据：vector / list / deque / map</text>
+
+  <rect x="28" y="122" width="270" height="46" rx="9" class="svg-box"/>
+  <text x="44" y="142" class="svg-text">算法 algorithm</text>
+  <text x="44" y="159" class="svg-small">算数据：sort / find / transform</text>
+
+  <rect x="28" y="180" width="270" height="46" rx="9" class="svg-box"/>
+  <text x="44" y="200" class="svg-text">迭代器 iterator</text>
+  <text x="44" y="217" class="svg-small">胶水：begin/end、类别标签</text>
+
+  <rect x="28" y="238" width="270" height="46" rx="9" class="svg-box"/>
+  <text x="44" y="258" class="svg-text">仿函数 functor</text>
+  <text x="44" y="275" class="svg-small">策略：less / greater / hash</text>
+
+  <rect x="28" y="296" width="270" height="46" rx="9" class="svg-box"/>
+  <text x="44" y="316" class="svg-text">适配器 adapter</text>
+  <text x="44" y="333" class="svg-small">改接口：stack / reverse_iterator</text>
+
+  <rect x="28" y="354" width="270" height="46" rx="9" class="svg-box-accent svg-pulse"/>
+  <text x="44" y="374" class="svg-bad-text">配置器 allocator</text>
+  <text x="44" y="391" class="svg-small">管内存：allocate / deallocate</text>
+
+  <text x="308" y="376" class="svg-good-text" style="font-size:11.5px">最底层</text>
+
+  <rect x="392" y="64" width="340" height="336" rx="14" fill="#fff" stroke="#e2e8f0"/>
+  <text x="414" y="94" class="svg-title">第六个参数，天天在场</text>
+  <text x="414" y="128" class="svg-mono" style="font-size:11px">template&lt;class T,</text>
+  <text x="414" y="148" class="svg-mono" style="font-size:11px">         class Alloc = allocator&lt;T&gt;&gt;</text>
+  <text x="414" y="168" class="svg-mono" style="font-size:11px">class vector;</text>
+
+  <text x="414" y="202" class="svg-text">平时不写，不代表它不存在。</text>
+  <text x="414" y="228" class="svg-text">容器要空间、要构造、要销毁，</text>
+  <text x="414" y="254" class="svg-text">每一步都绕不开配置器。</text>
+
+  <text x="414" y="292" class="svg-title">依赖方向</text>
+  <text x="414" y="320" class="svg-text">容器 → 算法 → 迭代器</text>
+  <text x="414" y="344" class="svg-text">→ 仿函数 → 适配器 → 配置器</text>
+  <text x="414" y="376" class="svg-small">配置器在最底层，不再依赖别人。</text>
+</svg>
+`
+  },
+  {
+    nav: '分配与构造',
+    title: '2. 分配与构造分离：先拿到地，再盖房子',
+    caption: '<code>allocate(3)</code> 只返回一块能放 3 个 <code>string</code> 的原始内存，里面没有活对象；<code>construct(p, args...)</code> 才真正调用构造函数。所以 <code>reserve</code> 可以只要内存不要对象，<code>vector</code> 扩容也能先分配新家、再把旧元素一个个搬过去。',
+    code: 'allocator<string> alloc;\nusing Traits = allocator_traits<allocator<string>>;\nstring* p = alloc.allocate(3);          // 只有原始内存\nTraits::construct(alloc, p + 0, "hello");\nTraits::construct(alloc, p + 1, "stl");\nTraits::construct(alloc, p + 2, "world");\n// 此时 p[0]=hello，p[1]=stl，p[2]=world\n// 未构造的槽位不能读，读就是 UB',
+    highlight: [2, 3, 4, 5],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="allocate 得到的原始内存与 construct 之后的对象两条轨道">
+  <text x="28" y="32" class="svg-title">同一块内存，两条轨道：内存轨与对象轨</text>
+
+  <text x="248" y="62" class="svg-small">内存轨：allocate(3) 拿到的原始内存</text>
+  <text x="248" y="216" class="svg-small">对象轨：construct 之后才有活对象</text>
+
+  <rect x="28" y="72" width="196" height="76" rx="10" class="svg-box-accent"/>
+  <text x="44" y="98" class="svg-mono">allocate(3)</text>
+  <text x="44" y="120" class="svg-small">返回 string*，3 个槽位</text>
+  <text x="44" y="140" class="svg-small">里面一个对象都没有</text>
+
+  <rect x="248" y="72" width="100" height="76" rx="8" class="svg-box-ghost"/>
+  <text x="298" y="100" text-anchor="middle" class="svg-small">槽位 0</text>
+  <text x="298" y="126" text-anchor="middle" class="svg-small">未构造</text>
+
+  <rect x="360" y="72" width="100" height="76" rx="8" class="svg-box-ghost"/>
+  <text x="410" y="100" text-anchor="middle" class="svg-small">槽位 1</text>
+  <text x="410" y="126" text-anchor="middle" class="svg-small">未构造</text>
+
+  <rect x="472" y="72" width="100" height="76" rx="8" class="svg-box-ghost"/>
+  <text x="522" y="100" text-anchor="middle" class="svg-small">槽位 2</text>
+  <text x="522" y="126" text-anchor="middle" class="svg-small">未构造</text>
+
+  <text x="588" y="96" class="svg-small">allocate 之后</text>
+  <text x="588" y="116" class="svg-small">还没有 string</text>
+  <text x="588" y="136" class="svg-small">不能读，不能析构</text>
+
+  <line x1="298" y1="150" x2="298" y2="224" class="svg-arrow-accent"/>
+  <line x1="410" y1="150" x2="410" y2="224" class="svg-arrow-accent"/>
+  <line x1="522" y1="150" x2="522" y2="224" class="svg-arrow-accent"/>
+
+  <rect x="248" y="226" width="100" height="76" rx="8" class="svg-box-good"/>
+  <text x="298" y="254" text-anchor="middle" class="svg-mono">hello</text>
+  <text x="298" y="280" text-anchor="middle" class="svg-small">size 5</text>
+
+  <rect x="360" y="226" width="100" height="76" rx="8" class="svg-box-good"/>
+  <text x="410" y="254" text-anchor="middle" class="svg-mono">stl</text>
+  <text x="410" y="280" text-anchor="middle" class="svg-small">size 3</text>
+
+  <rect x="472" y="226" width="100" height="76" rx="8" class="svg-box-good"/>
+  <text x="522" y="254" text-anchor="middle" class="svg-mono">world</text>
+  <text x="522" y="280" text-anchor="middle" class="svg-small">size 5</text>
+
+  <text x="588" y="196" class="svg-mono">construct</text>
+  <text x="588" y="216" class="svg-small">在指定地址上调构造</text>
+  <text x="588" y="252" class="svg-small">construct 之后</text>
+  <text x="588" y="272" class="svg-small">才有对象、才谈析构</text>
+
+  <text x="28" y="336" class="svg-text">reserve(n) 只要内存，不要对象。</text>
+  <text x="28" y="362" class="svg-text">size &lt; capacity 时，后半段就停在这里：有地，没房。</text>
+  <text x="28" y="390" class="svg-small">拆开的三条理由：reserve / 扩容先分配新家再搬家 / 内存池不关心类型。</text>
+</svg>
+`
+  },
+  {
+    nav: '析构与释放',
+    title: '3. destroy 管人，deallocate 管地，顺序不能反',
+    caption: '<code>destroy(p)</code> 只调用析构函数，内存还在；<code>deallocate(p, n)</code> 才把内存还给分配器。顺序固定：<code>allocate → construct → ... → destroy → deallocate</code>。少一步就是 UB 或泄漏，顺序错了也是 UB。',
+    code: 'for (int i = 0; i < 3; ++i)\n    Traits::destroy(alloc, p + i);   // 对象死，内存还在\ncout << "destroy 之后对象已析构，但内存还在";\n\nalloc.deallocate(p, 3);              // 内存才还回去\ncout << "deallocate 之后，这块内存才真正还给分配器";\n\n// 顺序：allocate → construct → ... → destroy → deallocate',
+    highlight: [1, 2, 4, 5],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="allocate、construct、destroy、deallocate 的固定顺序与错误顺序">
+  <text x="28" y="32" class="svg-title">四步一条线：先造后毁，先还对象再还地</text>
+
+  <rect x="28" y="76" width="160" height="64" rx="9" class="svg-box-accent"/>
+  <text x="44" y="102" class="svg-mono">① allocate</text>
+  <text x="44" y="124" class="svg-small">内存到手，对象还没</text>
+
+  <rect x="208" y="76" width="160" height="64" rx="9" class="svg-box-good"/>
+  <text x="224" y="102" class="svg-mono">② construct</text>
+  <text x="224" y="124" class="svg-small">对象出生，开始记账</text>
+
+  <rect x="388" y="76" width="160" height="64" rx="9" class="svg-box-warn"/>
+  <text x="404" y="102" class="svg-mono">③ destroy</text>
+  <text x="404" y="124" class="svg-small">对象死亡，地还在</text>
+
+  <rect x="568" y="76" width="160" height="64" rx="9" class="svg-box-ghost"/>
+  <text x="584" y="102" class="svg-mono">④ deallocate</text>
+  <text x="584" y="124" class="svg-small">地还回去，到此结束</text>
+
+  <line x1="188" y1="108" x2="208" y2="108" class="svg-arrow"/>
+  <line x1="368" y1="108" x2="388" y2="108" class="svg-arrow"/>
+  <line x1="548" y1="108" x2="568" y2="108" class="svg-arrow"/>
+
+  <text x="380" y="160" text-anchor="middle" class="svg-small">这三段都不能省，也不能跳着走</text>
+
+  <rect x="28" y="176" width="700" height="72" rx="10" class="svg-box-good"/>
+  <text x="48" y="204" class="svg-text">destroy 之后：对象已析构，内存还在（还没 deallocate）。</text>
+  <text x="48" y="232" class="svg-small">deallocate 之后，这块内存才真正还给分配器；此时再碰 p，就是悬垂指针。</text>
+
+  <rect x="28" y="264" width="336" height="76" rx="10" class="svg-box-bad"/>
+  <text x="46" y="290" class="svg-bad-text" style="font-size:12px">漏掉 destroy</text>
+  <text x="46" y="312" class="svg-small">析构函数不执行，成员资源没释放，</text>
+  <text x="46" y="330" class="svg-small">内存还了也是泄漏。</text>
+
+  <rect x="392" y="264" width="336" height="76" rx="10" class="svg-box-bad"/>
+  <text x="410" y="290" class="svg-bad-text" style="font-size:12px">deallocate 提前</text>
+  <text x="410" y="312" class="svg-small">内存已归还，对象还活着，</text>
+  <text x="410" y="330" class="svg-small">再析构就是踩别人的地。</text>
+
+  <text x="28" y="368" class="svg-text">allocate ↔ deallocate：管内存</text>
+  <text x="392" y="368" class="svg-text">construct ↔ destroy：管对象</text>
+  <text x="28" y="394" class="svg-small">两对各自配对，中间那段顺序就是对象的生命周期。</text>
+</svg>
+`
+  },
+  {
+    nav: '统一门面',
+    title: '4. allocator_traits：容器和配置器之间的中间人',
+    caption: 'C++11 之前，容器直接调用 <code>Alloc::rebind&lt;T&gt;::other</code>，旧式配置器少一个成员就编译不过。有了 <code>allocator_traits&lt;Alloc&gt;</code> 这层门面：配置器有 <code>rebind</code> 就用它的，没有就按 <code>value_type</code> 自动推导；没有 <code>construct</code> 就用 placement new。容器只跟 traits 打交道。',
+    code: 'using Traits = allocator_traits<Alloc>;\n\nTraits::allocate(alloc, n);\nTraits::construct(alloc, p, args...);   // 没有就 placement new\nTraits::destroy(alloc, p);\nTraits::max_size(alloc);\nusing NodeAlloc = Traits::rebind_alloc<Node>;\n\n// 容器只跟 traits 打交道，\n// 所以旧式配置器也能用。',
+    highlight: [2, 3, 6],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="容器通过 allocator_traits 与配置器打交道">
+  <text x="28" y="32" class="svg-title">容器不直接调配置器，它先问 traits</text>
+
+  <rect x="28" y="96" width="190" height="100" rx="10" class="svg-box"/>
+  <text x="46" y="126" class="svg-text">容器 container</text>
+  <text x="46" y="150" class="svg-small">vector / list / map</text>
+  <text x="46" y="172" class="svg-small">不直接碰配置器</text>
+
+  <line x1="220" y1="146" x2="284" y2="146" class="svg-arrow-accent svg-flow"/>
+
+  <rect x="288" y="80" width="210" height="132" rx="12" class="svg-box-accent svg-pulse"/>
+  <text x="306" y="108" class="svg-mono" style="font-size:11px">allocator_traits&lt;A&gt;</text>
+  <text x="306" y="132" class="svg-small">统一门面，一组 typedef</text>
+  <text x="306" y="154" class="svg-small">配置器有，就用配置器的</text>
+  <text x="306" y="176" class="svg-small">配置器没有，补默认值</text>
+  <text x="306" y="198" class="svg-small">旧式配置器也能编译</text>
+
+  <line x1="500" y1="146" x2="554" y2="146" class="svg-arrow-accent svg-flow"/>
+
+  <rect x="558" y="96" width="180" height="100" rx="10" class="svg-box"/>
+  <text x="576" y="126" class="svg-text">配置器</text>
+  <text x="576" y="150" class="svg-mono" style="font-size:11px">std::allocator&lt;T&gt;</text>
+  <text x="576" y="172" class="svg-small">CountingAlloc&lt;T&gt;</text>
+
+  <line x1="28" y1="240" x2="728" y2="240" stroke="#e2e8f0" stroke-width="1"/>
+
+  <circle cx="36" cy="258" r="4" class="svg-dot"/>
+  <text x="50" y="263" class="svg-mono" style="font-size:11px">allocate / deallocate</text>
+  <text x="230" y="263" class="svg-text">转发给配置器，配置器必须有</text>
+
+  <circle cx="36" cy="284" r="4" class="svg-dot"/>
+  <text x="50" y="289" class="svg-mono" style="font-size:11px">construct / destroy</text>
+  <text x="230" y="289" class="svg-text">没有就 placement new / 显式调析构</text>
+
+  <circle cx="36" cy="310" r="4" class="svg-dot"/>
+  <text x="50" y="315" class="svg-mono" style="font-size:11px">max_size(alloc)</text>
+  <text x="230" y="315" class="svg-text">按配置器能给的上限算</text>
+
+  <circle cx="36" cy="336" r="4" class="svg-dot"/>
+  <text x="50" y="341" class="svg-mono" style="font-size:11px">rebind_alloc&lt;Node&gt;</text>
+  <text x="230" y="341" class="svg-text">有 rebind 用配置器的，没有就按 value_type 推导</text>
+
+  <circle cx="36" cy="362" r="4" class="svg-dot"/>
+  <text x="50" y="367" class="svg-mono" style="font-size:11px">propagate_on_container_*</text>
+  <text x="230" y="367" class="svg-text">默认 false_type，自己写的就是 false</text>
+
+  <text x="28" y="394" class="svg-small">容器只跟 traits 打交道，配置器少写几个成员也不会编译不过。</text>
+</svg>
+`
+  },
+  {
+    nav: '重绑与开销',
+    title: '5. rebind：元素之外，还有节点的路费',
+    caption: '<code>list&lt;int&gt;</code> 真正分配的是 <code>_List_node&lt;int&gt;</code>，所以要拿 int 配置器重绑定成节点配置器。用 CountingAlloc 量一量：<code>vector&lt;int&gt;</code> 插 5 个，4 次分配共 60 字节；<code>list&lt;int&gt;</code> 5 次共 120 字节；<code>map&lt;int,int&gt;</code> 5 次共 200 字节。5 个 int 从来不是 20 字节。',
+    code: 'using IntAlloc = CountingAlloc<int>;\nusing PairAlloc = allocator_traits<IntAlloc>::rebind_alloc<pair<const int, int>>;\n\n// vector<int>  4 次分配，累计 60 字节（capacity=8）\n// list<int>    5 次分配，累计 120 字节（节点 24）\n// map<int,int> 5 次分配，累计 200 字节（节点 40）\n// 每个节点单独分配，所以次数 = 元素个数',
+    highlight: [4, 5, 6],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="rebind 把元素配置器重绑成节点配置器，以及三种容器的实测字节数">
+  <text x="28" y="32" class="svg-title">rebind：从“管 int”换成“管节点”</text>
+
+  <rect x="28" y="60" width="160" height="50" rx="9" class="svg-box"/>
+  <text x="42" y="90" class="svg-mono" style="font-size:11px">CountingAlloc&lt;int&gt;</text>
+
+  <line x1="190" y1="85" x2="244" y2="85" class="svg-arrow-accent"/>
+  <text x="196" y="76" class="svg-small">rebind_alloc</text>
+
+  <rect x="246" y="60" width="210" height="50" rx="9" class="svg-box-accent"/>
+  <text x="260" y="90" class="svg-mono" style="font-size:11px">CountingAlloc&lt;_List_node&lt;int&gt;&gt;</text>
+
+  <text x="472" y="80" class="svg-small">value_type：int → 节点类型</text>
+  <text x="472" y="102" class="svg-small">sizeof(T)：4 字节 → 24 字节</text>
+
+  <rect x="28" y="128" width="430" height="74" rx="10" class="svg-box"/>
+  <text x="46" y="154" class="svg-text">vector&lt;int&gt; 插入 5 个</text>
+  <text x="46" y="178" class="svg-mono" style="font-size:11px">4 次分配 · 累计 60 字节 · capacity=8</text>
+  <text x="46" y="196" class="svg-small">按块分配：1+2+4+8 个槽位，次数 = 扩容次数</text>
+
+  <rect x="28" y="214" width="430" height="74" rx="10" class="svg-box"/>
+  <text x="46" y="240" class="svg-text">list&lt;int&gt; 插入 5 个</text>
+  <text x="46" y="264" class="svg-mono" style="font-size:11px">5 次分配 · 累计 120 字节 · 节点 24</text>
+  <text x="46" y="282" class="svg-small">每个元素单独分配：prev + next + 数据 + 对齐</text>
+
+  <rect x="28" y="300" width="430" height="74" rx="10" class="svg-box"/>
+  <text x="46" y="326" class="svg-text">map&lt;int,int&gt; 插入 5 个</text>
+  <text x="46" y="350" class="svg-mono" style="font-size:11px">5 次分配 · 累计 200 字节 · 节点 40</text>
+  <text x="46" y="368" class="svg-small">红黑树节点：颜色 + 3 个指针 + pair</text>
+
+  <rect x="474" y="128" width="264" height="262" rx="12" fill="#fff" stroke="#e2e8f0"/>
+  <text x="490" y="152" class="svg-small">配置器视角的累计字节</text>
+
+  <text x="490" y="198" class="svg-mono" style="font-size:11px">vector</text>
+  <rect x="536" y="186" width="48" height="16" class="svg-dot"/>
+  <text x="592" y="198" class="svg-small">60</text>
+
+  <text x="490" y="228" class="svg-mono" style="font-size:11px">list</text>
+  <rect x="536" y="216" width="96" height="16" class="svg-dot"/>
+  <text x="640" y="228" class="svg-small">120</text>
+
+  <text x="490" y="258" class="svg-mono" style="font-size:11px">map</text>
+  <rect x="536" y="246" width="160" height="16" class="svg-dot"/>
+  <text x="704" y="258" class="svg-small">200</text>
+
+  <text x="490" y="290" class="svg-small">list：prev + next 16 + int 4 + 对齐 4</text>
+  <text x="490" y="314" class="svg-small">map：3 指针 24 + 颜色 4 + 对齐 4</text>
+  <text x="490" y="336" class="svg-small">     + pair 8 = 40 字节</text>
+  <text x="490" y="360" class="svg-small">这里不含 malloc 块头和填充，</text>
+  <text x="490" y="378" class="svg-small">真实占用只会更大。</text>
+
+  <text x="28" y="398" class="svg-small">结论：“5 个 int”从来不是 20 字节，容器有自己的骨架。</text>
+</svg>
+`
+  },
+  {
+    nav: '运行期资源',
+    title: '6. pmr：分配策略是值，不是类型',
+    caption: 'C++17 的 <code>std::pmr</code> 把配置器换成了运行期的 <code>memory_resource</code> 指针。于是 <code>std::pmr::vector&lt;int&gt;</code> 这个类型不变，换一个 pool 就换一套分配策略。好处是减少 malloc/free 次数、提升缓存局部性；代价是生命周期和 pool 绑定，pool 死了容器不能再用。',
+    code: '#include <memory_resource>\nstd::pmr::vector<int> v{&pool};\n\n// monotonic_buffer_resource  线性递增，不回收单个对象\n// unsynchronized_pool_resource 小对象池，单线程用\n// synchronized_pool_resource   线程安全池\n\n// 配置器不必写死在类型里，C++17 起可以运行期注入',
+    highlight: [1],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="pmr 容器持有一个 memory_resource 指针，可以指向不同的内存池">
+  <text x="28" y="32" class="svg-title">同一个容器类型，换一个内存池</text>
+
+  <rect x="28" y="72" width="196" height="76" rx="10" class="svg-box-accent"/>
+  <text x="42" y="98" class="svg-mono" style="font-size:11px">std::pmr::vector&lt;int&gt;</text>
+  <text x="42" y="120" class="svg-small">类型里没有 pool</text>
+  <text x="42" y="140" class="svg-small">换池不改类型</text>
+
+  <line x1="228" y1="110" x2="300" y2="110" class="svg-arrow-accent svg-flow"/>
+  <text x="230" y="100" class="svg-small">只存一个指针</text>
+
+  <rect x="302" y="86" width="176" height="46" rx="9" class="svg-box-warn"/>
+  <text x="318" y="114" class="svg-mono" style="font-size:11px">memory_resource*</text>
+
+  <line x1="480" y1="109" x2="520" y2="76" class="svg-arrow"/>
+  <line x1="480" y1="109" x2="520" y2="136" class="svg-arrow"/>
+  <line x1="480" y1="109" x2="520" y2="194" class="svg-arrow"/>
+
+  <rect x="524" y="52" width="208" height="48" rx="9" class="svg-box"/>
+  <text x="538" y="74" class="svg-mono" style="font-size:10.5px">monotonic_buffer_resource</text>
+  <text x="538" y="92" class="svg-small">只增不减，线性递增</text>
+
+  <rect x="524" y="112" width="208" height="48" rx="9" class="svg-box"/>
+  <text x="538" y="134" class="svg-mono" style="font-size:10.5px">unsynchronized_pool_resource</text>
+  <text x="538" y="152" class="svg-small">小对象池，单线程用</text>
+
+  <rect x="524" y="172" width="208" height="48" rx="9" class="svg-box"/>
+  <text x="538" y="194" class="svg-mono" style="font-size:10.5px">synchronized_pool_resource</text>
+  <text x="538" y="212" class="svg-small">线程安全池</text>
+
+  <line x1="28" y1="244" x2="728" y2="244" stroke="#e2e8f0" stroke-width="1"/>
+
+  <rect x="28" y="260" width="340" height="90" rx="10" class="svg-box-ghost"/>
+  <text x="46" y="282" class="svg-small">C++14 及以前：pool 写进类型</text>
+  <text x="46" y="306" class="svg-mono" style="font-size:11px">vector&lt;int, MyPool&lt;int&gt;&gt;</text>
+  <text x="46" y="342" class="svg-small">换个池就是另一个类型，模板当场炸开</text>
+
+  <rect x="392" y="260" width="336" height="90" rx="10" class="svg-box-accent"/>
+  <text x="410" y="282" class="svg-small">C++17 pmr：资源是运行期的值</text>
+  <text x="410" y="306" class="svg-mono" style="font-size:11px">pmr::vector&lt;int&gt; v{&amp;pool};</text>
+  <text x="410" y="342" class="svg-small">同一个类型，运行期换资源</text>
+
+  <text x="28" y="374" class="svg-good-text" style="font-size:13px">分配策略是值，不是类型。</text>
+  <text x="28" y="398" class="svg-small">代价：pool 不能比容器先死；换来的是更少的 malloc 和更好的局部性。</text>
+</svg>
+`
+  }
+];
+</script>
+<script src="visual.js"></script>
+</body>
+</html>

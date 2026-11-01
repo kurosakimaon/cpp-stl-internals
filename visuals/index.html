@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图解专区 · C++ STL 底层结构</title>
+<link rel="stylesheet" href="visual.css">
+</head>
+<body>
+<div class="container">
+  <div class="top-links">
+    <a class="back-btn" href="../index.html">← 总路线图</a>
+    <a class="top-link" href="../stl_internals/index.html">STL 模块</a>
+    <a class="top-link" href="../stl_internals/tutorial.md">模块教程</a>
+  </div>
+
+  <header class="page-head">
+    <div class="kicker">图解专区 · 六章全覆盖</div>
+    <h1>把 STL 的底层结构，一步一步动起来</h1>
+    <p>六张图解对应六章源码。每张都能单步前进、自动播放，并在右侧同步显示代码对照。先看图建立直觉，再回到源码里验证细节。</p>
+  </header>
+
+  <div class="hub-section">容器与内存</div>
+  <div class="hub-grid">
+    <a class="hub-card" href="allocator.html">
+      <div class="hub-tag">第 1 章 · 配置器</div>
+      <h2>内存从哪来，对象什么时候活</h2>
+      <p>allocate 与 construct 分开、destroy 与 deallocate 分开，再加上 allocator_traits 这层门面：看容器怎样把“要内存”和“建对象”拆成两步。</p>
+      <span class="hub-tag">6 步 · 分配链路</span>
+    </a>
+
+    <a class="hub-card" href="dynamic_array.html">
+      <div class="hub-tag">第 2 章 · vector</div>
+      <h2>三根指针，怎么撑起动态数组</h2>
+      <p>从 _M_start / _M_finish / _M_end_of_storage 出发，看两倍扩容怎样搬运、摊还成本为什么是 O(1)、reserve 与 resize 差在哪。</p>
+      <span class="hub-tag">7 步 · 扩容动画</span>
+    </a>
+
+    <a class="hub-card" href="list_deque.html">
+      <div class="hub-tag">第 3 章 · list / deque</div>
+      <h2>哨兵环与分段连续</h2>
+      <p>list 用一条环和 0 次搬移换插入稳定；deque 用中控器加固定缓冲区，把两端插入压到 O(1)。最后用一张表分清三种容器的失效规则。</p>
+      <span class="hub-tag">7 步 · 结构对比</span>
+    </a>
+  </div>
+
+  <div class="hub-section">结构与算法</div>
+  <div class="hub-grid">
+    <a class="hub-card" href="rb_tree.html">
+      <div class="hub-tag">第 4 章 · map / set</div>
+      <h2>红黑树：插入之后，树怎么自己修好</h2>
+      <p>节点布局、header 哨兵，以及插入修复的三种情况：什么时候只变色，什么时候单旋，什么时候双旋。</p>
+      <span class="hub-tag">7 步 · 旋转修复</span>
+    </a>
+
+    <a class="hub-card" href="hash_table.html">
+      <div class="hub-tag">第 5 章 · unordered_map</div>
+      <h2>哈希表：O(1) 不是白给的</h2>
+      <p>桶数组配一条全局单链表，rehash 只重串链不搬节点；再用好哈希与坏哈希对比，看清桶链退化的代价。</p>
+      <span class="hub-tag">7 步 · 桶与链</span>
+    </a>
+
+    <a class="hub-card" href="iterators.html">
+      <div class="hub-tag">第 6 章 · 迭代器 / 算法</div>
+      <h2>同一句 advance，代价能差 1000 倍</h2>
+      <p>五类迭代器与 iterator_traits 决定算法走哪条实现：distance 分派、内省排序、lower_bound，以及 erase-remove 惯用法。</p>
+      <span class="hub-tag">6 步 · 标签分派</span>
+    </a>
+  </div>
+
+  <p class="page-foot">
+    所有图解均对应 <a href="../stl_internals/index.html">stl_internals</a> 中的同号章节源码 ·
+    配套文字教程见 <a href="../stl_internals/tutorial.md">tutorial.md</a> ·
+    建议顺序：配置器 → vector → list/deque → 红黑树 → 哈希表 → 迭代器与算法。
+  </p>
+</div>
+</body>
+</html>

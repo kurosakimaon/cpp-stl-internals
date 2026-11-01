@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>list 与 deque：节点、分段，以及插入的账单 - C++ 图解</title>
+<link rel="stylesheet" href="visual.css">
+</head>
+<body>
+<div class="container">
+  <div class="top-links">
+    <a class="back-btn" href="index.html">← 图解专区</a>
+    <a class="top-link" href="../stl_internals/index.html">STL 模块</a>
+    <a class="top-link" href="../stl_internals/tutorial.md">模块教程</a>
+    <a class="top-link" href="../index.html">总路线图</a>
+  </div>
+
+  <header class="page-head">
+    <div class="kicker">图解专区 · STL 源码</div>
+    <h1>list 与 deque：节点、分段，以及插入的账单</h1>
+    <p>vector 是一整块连续内存，list 是一堆散落的节点，deque 夹在中间，是分段连续。这一页把哨兵环、splice、中控器与缓冲区逐帧画出来，再用同一台机器上量到的数字，算清“中间插入”到底要搬几次、什么时候迭代器和引用会失效。</p>
+  </header>
+
+  <div class="viz-shell">
+    <div class="stage" id="stage" aria-live="polite"></div>
+    <aside class="side">
+      <div class="step-index" id="counter">1 / 7</div>
+      <h2 id="stepTitle"></h2>
+      <p class="caption" id="caption" aria-live="polite"></p>
+      <div class="code-wrap">
+        <div class="code-label">代码对照</div>
+        <pre class="code"><code id="code"></code></pre>
+      </div>
+    </aside>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-ghost" id="prevBtn" type="button">← 上一步</button>
+    <button class="btn btn-primary" id="nextBtn" type="button">下一步 →</button>
+    <div class="progress"><i id="progressBar"></i></div>
+    <span class="counter" id="stepCountLabel"></span>
+    <button class="btn btn-ghost" id="resetBtn" type="button">重置</button>
+  </div>
+
+  <div class="step-nav" id="steps"></div>
+
+  <p class="page-foot">
+    对应源码：<a href="../stl_internals/03_list_deque_internals.cpp">03_list_deque_internals.cpp</a> ·
+    相关教程：<a href="../stl_internals/tutorial.md">stl_internals/tutorial.md</a> ·
+    图中数字取自本机 g++ 编译运行的实际输出（64 位 libstdc++）。
+  </p>
+</div>
+
+<script>
+window.STEPS = [
+  {
+    nav: '节点布局',
+    title: '1. list 的节点：两个指针，24 字节',
+    caption: 'list 不存 head / tail，只存一个不存数据的哨兵 header。节点是 <code>prev</code>、<code>next</code> 两个指针夹着数据，64 位下一个 <code>int</code> 节点 24 字节（16 + 4 + 4 对齐）；而 <code>sizeof(list&lt;int&gt;)</code> 也是 24 字节 = 哨兵两个指针 16 + 缓存的 size 8。空链表也不是空指针，而是两条指针都指回自己的一条合法环。',
+    code: 'struct _List_node_base {\n    _List_node_base* _M_next;\n    _List_node_base* _M_prev;\n};\ntemplate<class T>\nstruct _List_node : _List_node_base {\n    T _M_data;\n};\n// sizeof(list<int>) = 24：header 16 + size 8\n// 空链表：header.next = header.prev = &header',
+    highlight: [4, 5, 6, 8, 9],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="list 节点布局与空链表的哨兵">
+  <text x="28" y="32" class="svg-title">list 节点：两个指针夹着一个数据</text>
+
+  <rect x="40" y="58" width="98" height="50" rx="8" class="svg-box"/>
+  <text x="89" y="88" text-anchor="middle" class="svg-text">节点 10</text>
+
+  <line x1="138" y1="83" x2="206" y2="83" class="svg-arrow"/>
+
+  <rect x="208" y="58" width="98" height="50" rx="8" class="svg-box-accent"/>
+  <text x="257" y="88" text-anchor="middle" class="svg-text">节点 20</text>
+
+  <line x1="306" y1="83" x2="374" y2="83" class="svg-arrow"/>
+
+  <rect x="376" y="58" width="98" height="50" rx="8" class="svg-box"/>
+  <text x="425" y="88" text-anchor="middle" class="svg-text">节点 30</text>
+
+  <text x="496" y="74" class="svg-small">每个节点单独 new，</text>
+  <text x="496" y="94" class="svg-small">地址不连续、也不递增。</text>
+
+  <text x="40" y="142" class="svg-title">节点 20 的内部（64 位）</text>
+
+  <rect x="40" y="154" width="140" height="66" rx="8" class="svg-box"/>
+  <text x="110" y="178" text-anchor="middle" class="svg-small">_M_prev</text>
+  <text x="110" y="200" text-anchor="middle" class="svg-mono">8 字节</text>
+
+  <rect x="180" y="154" width="140" height="66" rx="8" class="svg-box"/>
+  <text x="250" y="178" text-anchor="middle" class="svg-small">_M_next</text>
+  <text x="250" y="200" text-anchor="middle" class="svg-mono">8 字节</text>
+
+  <rect x="320" y="154" width="120" height="66" rx="8" class="svg-box-accent"/>
+  <text x="380" y="178" text-anchor="middle" class="svg-small">_M_data</text>
+  <text x="380" y="200" text-anchor="middle" class="svg-mono">int 4 字节</text>
+
+  <rect x="440" y="154" width="70" height="66" rx="8" class="svg-box-ghost"/>
+  <text x="475" y="178" text-anchor="middle" class="svg-small">对齐</text>
+  <text x="475" y="200" text-anchor="middle" class="svg-mono">4 字节</text>
+
+  <text x="524" y="180" class="svg-text">16 + 4 + 4 = 24</text>
+  <text x="524" y="202" class="svg-small">一个 int 节点就占 24 字节</text>
+
+  <text x="40" y="244" class="svg-text">sizeof(list&lt;int&gt;) = 24 字节：header 两指针 16 + 缓存的 size 8。</text>
+
+  <rect x="60" y="288" width="130" height="54" rx="10" class="svg-box-accent"/>
+  <text x="125" y="310" text-anchor="middle" class="svg-text">header</text>
+  <text x="125" y="329" text-anchor="middle" class="svg-small">（哨兵，不存数据）</text>
+
+  <path d="M 60 300 C 26 300 26 332 60 332" class="svg-arrow svg-flow"/>
+  <path d="M 190 300 C 224 300 224 332 190 332" class="svg-arrow svg-flow"/>
+
+  <text x="40" y="366" class="svg-small">空链表：next / prev 都指回自己。</text>
+
+  <rect x="300" y="280" width="420" height="104" rx="12" class="svg-box"/>
+  <text x="322" y="306" class="svg-text">begin() = header.next → 首元素</text>
+  <text x="322" y="332" class="svg-text">end() = &amp;header（哨兵本身）</text>
+  <text x="322" y="358" class="svg-small">空链表也是一条合法的环，不用特判首尾。</text>
+</svg>
+`
+  },
+  {
+    nav: '哨兵环',
+    title: '2. 整条链只有一个哨兵，绕成一个环',
+    caption: '整条链只有 <code>_M_node</code> 一个哨兵：<code>begin() = header.next</code>，<code>end() = &amp;header</code>，所以 <code>++it</code> 走到哨兵就是 end，<code>--end()</code> 直接到最后一个元素。有了这条环，头插、尾插、删除全都不用特判空链表。实测从 begin() 走 size() = 4 步，正好等于 end()。',
+    code: '// list 只存一个哨兵，不存 head / tail\n// begin() = header._M_next\n// end()   = &header\nauto it = l.begin();\nfor (size_t i = 0; i < l.size(); ++i) ++it;\n// 走 size() = 4 步后 it == l.end() → true\n// 标准规定 ++end() 是 UB，生产代码别依赖',
+    highlight: [0, 1, 2, 5],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="list 的哨兵把整条链绕成一个环">
+  <text x="28" y="32" class="svg-title">header 既是“头之前”，也是 end()</text>
+
+  <circle cx="320" cy="95" r="30" class="svg-box-accent"/>
+  <text x="320" y="90" text-anchor="middle" class="svg-small">header</text>
+  <text x="320" y="107" text-anchor="middle" class="svg-mono" style="font-size:10px">= end()</text>
+
+  <circle cx="439" cy="181" r="30" class="svg-box"/>
+  <text x="439" y="187" text-anchor="middle" class="svg-text">1</text>
+
+  <circle cx="394" cy="321" r="30" class="svg-box"/>
+  <text x="394" y="327" text-anchor="middle" class="svg-text">2</text>
+
+  <circle cx="246" cy="321" r="30" class="svg-box"/>
+  <text x="246" y="327" text-anchor="middle" class="svg-text">3</text>
+
+  <circle cx="201" cy="181" r="30" class="svg-box"/>
+  <text x="201" y="187" text-anchor="middle" class="svg-text">4</text>
+
+  <line x1="346" y1="110" x2="417" y2="155" class="svg-arrow"/>
+  <line x1="452" y1="207" x2="410" y2="295" class="svg-arrow"/>
+  <line x1="364" y1="321" x2="276" y2="321" class="svg-arrow"/>
+  <line x1="229" y1="295" x2="196" y2="211" class="svg-arrow"/>
+  <line x1="226" y1="163" x2="295" y2="113" class="svg-arrow"/>
+
+  <text x="452" y="252" class="svg-small">++ 沿 next</text>
+  <text x="118" y="126" class="svg-small">-- 沿 prev</text>
+
+  <text x="548" y="96" class="svg-text">整条链只有一个哨兵</text>
+  <text x="548" y="122" class="svg-mono" style="font-size:11px">_M_node</text>
+  <text x="548" y="158" class="svg-small">begin() = header.next</text>
+  <text x="548" y="180" class="svg-small">end() = &amp;header</text>
+  <text x="548" y="212" class="svg-small">++ 沿 next 走 size 步，</text>
+  <text x="548" y="232" class="svg-small">就正好回到 header。</text>
+  <text x="548" y="266" class="svg-small">图上每段只画一根线，</text>
+  <text x="548" y="286" class="svg-small">实际 next / prev 各一根。</text>
+
+  <text x="28" y="364" class="svg-text">实测：走 size() = 4 步后，it == end() 为 true。</text>
+  <text x="28" y="388" class="svg-small">libstdc++ 里 ++end() 会绕回首元素，但标准判 UB，生产代码别依赖。</text>
+</svg>
+`
+  },
+  {
+    nav: 'splice',
+    title: '3. splice 只改指针，元素一个都不搬',
+    caption: 'splice 把一段节点从一条链“剪”到另一条链，只改几个 <code>next</code> / <code>prev</code>：0 次构造、0 次拷贝、0 次析构。实测 <code>a.splice(指向 2 的位置, b)</code> 后 a = 1 4 5 6 2 3，b 被搬空；再单独把 4 挪到 c，指向 4 的迭代器仍然有效，只是现在属于 c。这就是“搬值”和“换指针”的差别。',
+    code: 'list<int> a{1, 2, 3};\nlist<int> b{4, 5, 6};\nauto pos = a.begin();\n++pos;              // 指向 2\na.splice(pos, b);   // 把 b 接到 2 前面\n// a = 1 4 5 6 2 3（size=6），b 空（size=0）\n// 移动 0 次、拷贝 0 次，只改 next / prev',
+    highlight: [4, 6],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="splice 把一条链的节点挂到另一条链">
+  <text x="28" y="32" class="svg-title">splice：把节点摘下来，挂到另一条链</text>
+
+  <text x="90" y="66" class="svg-small">链表 a（size = 3）</text>
+  <text x="400" y="66" class="svg-small">链表 b（size = 3）</text>
+
+  <rect x="90" y="80" width="72" height="48" rx="7" class="svg-box"/>
+  <text x="126" y="110" text-anchor="middle" class="svg-text">1</text>
+  <line x1="162" y1="104" x2="180" y2="104" class="svg-arrow"/>
+  <rect x="182" y="80" width="72" height="48" rx="7" class="svg-box-warn"/>
+  <text x="218" y="110" text-anchor="middle" class="svg-text">2</text>
+  <line x1="254" y1="104" x2="272" y2="104" class="svg-arrow"/>
+  <rect x="274" y="80" width="72" height="48" rx="7" class="svg-box"/>
+  <text x="310" y="110" text-anchor="middle" class="svg-text">3</text>
+
+  <rect x="400" y="80" width="72" height="48" rx="7" class="svg-box"/>
+  <text x="436" y="110" text-anchor="middle" class="svg-text">4</text>
+  <line x1="472" y1="104" x2="490" y2="104" class="svg-arrow"/>
+  <rect x="492" y="80" width="72" height="48" rx="7" class="svg-box"/>
+  <text x="528" y="110" text-anchor="middle" class="svg-text">5</text>
+  <line x1="564" y1="104" x2="582" y2="104" class="svg-arrow"/>
+  <rect x="584" y="80" width="72" height="48" rx="7" class="svg-box"/>
+  <text x="620" y="110" text-anchor="middle" class="svg-text">6</text>
+
+  <text x="182" y="152" class="svg-small">pos 指向 2：b 插在它前面</text>
+
+  <text x="28" y="180" class="svg-title">splice 之后：a = 1 4 5 6 2 3（size = 6），b 空（size = 0）</text>
+
+  <rect x="40" y="196" width="72" height="48" rx="7" class="svg-box"/>
+  <text x="76" y="226" text-anchor="middle" class="svg-text">1</text>
+  <line x1="112" y1="220" x2="120" y2="220" class="svg-arrow"/>
+  <rect x="122" y="196" width="72" height="48" rx="7" class="svg-box-good"/>
+  <text x="158" y="226" text-anchor="middle" class="svg-text">4</text>
+  <line x1="194" y1="220" x2="202" y2="220" class="svg-arrow"/>
+  <rect x="204" y="196" width="72" height="48" rx="7" class="svg-box-good"/>
+  <text x="240" y="226" text-anchor="middle" class="svg-text">5</text>
+  <line x1="276" y1="220" x2="284" y2="220" class="svg-arrow"/>
+  <rect x="286" y="196" width="72" height="48" rx="7" class="svg-box-good"/>
+  <text x="322" y="226" text-anchor="middle" class="svg-text">6</text>
+  <line x1="358" y1="220" x2="366" y2="220" class="svg-arrow"/>
+  <rect x="368" y="196" width="72" height="48" rx="7" class="svg-box-warn"/>
+  <text x="404" y="226" text-anchor="middle" class="svg-text">2</text>
+  <line x1="440" y1="220" x2="448" y2="220" class="svg-arrow"/>
+  <rect x="450" y="196" width="72" height="48" rx="7" class="svg-box"/>
+  <text x="486" y="226" text-anchor="middle" class="svg-text">3</text>
+
+  <rect x="560" y="196" width="110" height="48" rx="7" class="svg-box-ghost"/>
+  <text x="615" y="216" text-anchor="middle" class="svg-small">b 已搬空</text>
+  <text x="615" y="234" text-anchor="middle" class="svg-small">size = 0</text>
+
+  <rect x="40" y="266" width="200" height="40" rx="9" class="svg-box-good"/>
+  <text x="140" y="291" text-anchor="middle" class="svg-good-text" style="font-size:12.5px">移动 0 次</text>
+  <rect x="260" y="266" width="200" height="40" rx="9" class="svg-box-good"/>
+  <text x="360" y="291" text-anchor="middle" class="svg-good-text" style="font-size:12.5px">拷贝 0 次</text>
+  <rect x="480" y="266" width="240" height="40" rx="9" class="svg-box-good"/>
+  <text x="600" y="291" text-anchor="middle" class="svg-good-text" style="font-size:12.5px">构造 / 析构 0 次</text>
+
+  <text x="28" y="334" class="svg-text">搬值的做法：每个元素拷贝或移动一次，再析构旧的。</text>
+  <text x="28" y="360" class="svg-text">换指针的做法：只改几个 next / prev，元素和迭代器都不换。</text>
+  <text x="28" y="386" class="svg-small">指向 4 的迭代器 it4 仍然有效，只是现在属于 c。</text>
+</svg>
+`
+  },
+  {
+    nav: '中控器',
+    title: '4. deque 是分段连续：中控器 + 缓冲区',
+    caption: 'deque 的“连续”是分段连续：一个中控器指针数组 map，加上一块块固定大小的缓冲区。libstdc++ 对 <code>int</code> 的缓冲区是 512 字节，正好 128 个元素；同一块内地址连续，<code>d[127]</code> → <code>d[128]</code> 时地址会跳（实测跳 20 字节，因为块是单独分配的）。<code>sizeof(deque&lt;int&gt;)</code> = 80 字节 = map 指针 8 + map_size 8 + 两个四指针迭代器 64。',
+    code: 'deque<int> d;\nfor (int i = 0; i < 1000; ++i) d.push_back(i);\n// sizeof(deque<int>) = 80 字节\n// map 指针 8 + map_size 8 + 两个四指针迭代器 64\nd[127] → d[128]：地址跳变 20 字节（跨缓冲区）\n// 每块 512 字节 → int 恰好 128 个',
+    highlight: [2, 4],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="deque 的中控器指针数组与 512 字节缓冲区">
+  <text x="28" y="32" class="svg-title">deque 的“连续”是假的，是分段连续</text>
+
+  <text x="28" y="66" class="svg-small">map（中控器，指针数组，两端都留空位）</text>
+
+  <g>
+    <rect x="28" y="74" width="50" height="42" rx="6" class="svg-box-ghost"/>
+    <rect x="82" y="74" width="50" height="42" rx="6" class="svg-box-ghost"/>
+    <rect x="136" y="74" width="50" height="42" rx="6" class="svg-box-ghost"/>
+    <rect x="190" y="74" width="50" height="42" rx="6" class="svg-box-accent"/>
+    <circle cx="215" cy="95" r="4" class="svg-dot"/>
+    <rect x="244" y="74" width="50" height="42" rx="6" class="svg-box-accent"/>
+    <circle cx="269" cy="95" r="4" class="svg-dot"/>
+    <rect x="298" y="74" width="50" height="42" rx="6" class="svg-box-accent"/>
+    <circle cx="323" cy="95" r="4" class="svg-dot"/>
+    <rect x="352" y="74" width="50" height="42" rx="6" class="svg-box-ghost"/>
+  </g>
+
+  <rect x="430" y="60" width="300" height="44" rx="9" class="svg-box-accent"/>
+  <text x="444" y="88" class="svg-text">sizeof(deque&lt;int&gt;) = 80 字节</text>
+
+  <line x1="215" y1="116" x2="145" y2="192" class="svg-arrow-accent"/>
+  <line x1="269" y1="116" x2="355" y2="192" class="svg-arrow-accent"/>
+  <line x1="323" y1="116" x2="565" y2="192" class="svg-arrow-accent"/>
+
+  <rect x="60" y="196" width="170" height="96" rx="10" class="svg-box"/>
+  <text x="145" y="222" text-anchor="middle" class="svg-small">缓冲区</text>
+  <text x="145" y="242" text-anchor="middle" class="svg-mono" style="font-size:11px">512 字节 · 128 个 int</text>
+  <rect x="70" y="256" width="150" height="26" rx="5" class="svg-field"/>
+  <text x="145" y="273" text-anchor="middle" class="svg-small">块内地址连续</text>
+
+  <rect x="270" y="196" width="170" height="96" rx="10" class="svg-box"/>
+  <text x="355" y="222" text-anchor="middle" class="svg-small">缓冲区</text>
+  <text x="355" y="242" text-anchor="middle" class="svg-mono" style="font-size:11px">512 字节 · 128 个 int</text>
+  <rect x="280" y="256" width="150" height="26" rx="5" class="svg-field"/>
+  <text x="355" y="273" text-anchor="middle" class="svg-small">块内地址连续</text>
+
+  <rect x="480" y="196" width="170" height="96" rx="10" class="svg-box"/>
+  <text x="565" y="222" text-anchor="middle" class="svg-small">缓冲区</text>
+  <text x="565" y="242" text-anchor="middle" class="svg-mono" style="font-size:11px">512 字节 · 128 个 int</text>
+  <rect x="490" y="256" width="150" height="26" rx="5" class="svg-field"/>
+  <text x="565" y="273" text-anchor="middle" class="svg-small">块内地址连续</text>
+
+  <text x="145" y="314" text-anchor="middle" class="svg-small">首缓冲区</text>
+  <text x="355" y="314" text-anchor="middle" class="svg-small">中间缓冲区</text>
+  <text x="565" y="314" text-anchor="middle" class="svg-small">尾缓冲区</text>
+
+  <text x="28" y="348" class="svg-text">map 扩容时只补两端的指针，元素一个都不搬。</text>
+  <text x="28" y="372" class="svg-small">迭代器四个指针：cur / first / last / node；一次 ++ 要判断 cur 是否到了 last。</text>
+  <text x="28" y="396" class="svg-small">跨块：node++ 换 map 槽，first = *node，cur = first——比 vector 多一层寻址。</text>
+</svg>
+`
+  },
+  {
+    nav: '两端插入',
+    title: '5. 两端插入 O(1)：为什么引用还活着',
+    caption: 'push_front 只改 <code>_M_start</code>：在新缓冲区头部构造，旧元素一个都不搬，必要时才新建一块。实测 200 个元素里取 <code>d[100]</code> 的引用，再往头部插 100 个，引用值仍是 100、地址没变，但它现在的下标已经不是 100。规则：两端插入让迭代器全失效，但已有元素的引用 / 指针仍有效。',
+    code: 'deque<int> d;\nfor (int i = 0; i < 200; ++i) d.push_back(i);\nint& ref = d[100];\nfor (int i = 0; i < 100; ++i) d.push_front(-i);\n// ref 值仍是 100，地址没变（没被搬走）\n// 但它现在的下标已经不是 100\n// push_front/back：迭代器全失效，引用仍有效',
+    highlight: [3, 4, 5, 6],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="deque 头部插入时旧缓冲区不动，引用保持稳定">
+  <text x="28" y="32" class="svg-title">push_front 100 次：旧块原地不动，引用还活着</text>
+
+  <text x="28" y="66" class="svg-small">200 个元素，取 d[100] 的引用后再往头部插 100 个</text>
+
+  <rect x="45" y="120" width="140" height="90" rx="10" class="svg-box-ghost svg-pulse"/>
+  <text x="115" y="150" text-anchor="middle" class="svg-small">新缓冲区</text>
+  <text x="115" y="172" text-anchor="middle" class="svg-small">-99 .. -1</text>
+  <text x="115" y="192" text-anchor="middle" class="svg-small">push 时才建</text>
+
+  <rect x="200" y="120" width="143" height="90" rx="10" class="svg-box"/>
+  <text x="271" y="150" text-anchor="middle" class="svg-small">d[0..63]</text>
+  <rect x="208" y="166" width="127" height="24" rx="5" class="svg-field"/>
+
+  <rect x="345" y="120" width="143" height="90" rx="10" class="svg-box"/>
+  <text x="416" y="150" text-anchor="middle" class="svg-small">d[64..127]</text>
+  <rect x="353" y="166" width="127" height="24" rx="5" class="svg-field"/>
+  <rect x="392" y="169" width="30" height="18" rx="4" class="svg-box-warn"/>
+
+  <rect x="490" y="120" width="143" height="90" rx="10" class="svg-box"/>
+  <text x="561" y="150" text-anchor="middle" class="svg-small">d[128..199]</text>
+  <rect x="498" y="166" width="127" height="24" rx="5" class="svg-field"/>
+
+  <line x1="407" y1="250" x2="407" y2="212" class="svg-arrow-accent"/>
+  <text x="420" y="258" class="svg-small">int&amp; ref：值 100，地址没变</text>
+
+  <text x="28" y="302" class="svg-text">100 次 push_front 只改起止迭代器，旧元素一个都没搬。</text>
+  <text x="28" y="326" class="svg-text">ref 仍指向同一个对象，但它现在的下标已经不是 100。</text>
+  <text x="28" y="350" class="svg-text">两端插入：迭代器全失效，已有元素的引用 / 指针仍有效。</text>
+  <text x="28" y="376" class="svg-bad-text" style="font-size:12.5px">中间 insert / erase：标准说迭代器和引用全部失效。</text>
+  <text x="28" y="400" class="svg-small">因为中间插入会把某一侧整体搬走，引用不一定还指着原对象。</text>
+</svg>
+`
+  },
+  {
+    nav: '中间代价',
+    title: '6. 中间插入的账单：2501 次搬移 vs 0 次',
+    caption: '同样在中间插 1 个元素（n = 5000）：vector 要搬 2501 次，deque 挑近端搬也是 2501 次，list 0 次。但 list 的 0 次只说明“插入动作”便宜，找位置仍要从头走 n/2 步，而且每个节点一次分配。选型：头尾多选 deque，中间多选 list，要随机访问用 vector；拿不准就默认 vector。',
+    code: 'vector<Tracked> v;\nv.reserve(5001);\nv.emplace(v.begin() + 2500, 999);\n// 拷贝 0 次，移动 2501 次（后半段整体后移）\n// deque 同样 2501 次，list 0 次\n// list 的 0 次搬移 ≠ 快：定位仍要 O(n)，节点逐个分配',
+    highlight: [3, 4, 5],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="vector、deque、list 中间插入的搬移次数对比">
+  <text x="28" y="32" class="svg-title">在中间插 1 个元素（n = 5000，值 999）</text>
+  <text x="730" y="54" text-anchor="end" class="svg-small">Tracked 计数：拷贝 / 移动</text>
+
+  <text x="28" y="85" class="svg-text">vector</text>
+  <rect x="110" y="68" width="224" height="26" rx="4" class="svg-box"/>
+  <rect x="336" y="68" width="224" height="26" rx="4" class="svg-box-warn"/>
+  <line x1="336" y1="60" x2="336" y2="102" class="svg-arrow-accent"/>
+  <text x="336" y="56" text-anchor="middle" class="svg-small">插入点 2500</text>
+  <text x="110" y="118" class="svg-bad-text" style="font-size:11.5px">插入点之后的 2500 个元素整体后移</text>
+  <text x="738" y="86" text-anchor="end" class="svg-bad-text" style="font-size:12.5px">移动 2501 · 拷贝 0</text>
+
+  <text x="28" y="167" class="svg-text">deque</text>
+  <rect x="110" y="150" width="224" height="26" rx="4" class="svg-box"/>
+  <rect x="336" y="150" width="224" height="26" rx="4" class="svg-box-warn"/>
+  <line x1="336" y1="142" x2="336" y2="184" class="svg-arrow-accent"/>
+  <text x="110" y="200" class="svg-bad-text" style="font-size:11.5px">挑离得近的一端搬，实际仍是 2501 次</text>
+  <text x="738" y="168" text-anchor="end" class="svg-bad-text" style="font-size:12.5px">移动 2501 · 拷贝 0</text>
+
+  <text x="28" y="249" class="svg-text">list</text>
+  <rect x="110" y="232" width="450" height="26" rx="4" class="svg-box-good"/>
+  <line x1="336" y1="224" x2="336" y2="266" class="svg-arrow-accent"/>
+  <text x="110" y="282" class="svg-good-text" style="font-size:11.5px">只改 next / prev，元素一个都不搬</text>
+  <text x="738" y="250" text-anchor="end" class="svg-good-text" style="font-size:12.5px">移动 0 · 拷贝 0</text>
+
+  <rect x="28" y="300" width="704" height="102" rx="12" class="svg-box"/>
+  <text x="50" y="328" class="svg-text">头尾多 → deque；中间多 → list；要随机访问 → vector。</text>
+  <text x="50" y="352" class="svg-text">默认 vector：连续内存 + 缓存友好，大多数场景最快。</text>
+  <text x="50" y="378" class="svg-small">list 的 0 次不等于快：找位置仍要走 n/2 步，节点逐个分配。</text>
+</svg>
+`
+  },
+  {
+    nav: '失效规则',
+    title: '7. 三种容器的失效规则，一张表收尾',
+    caption: '把失效规则分开记：vector 扩容整块搬走，迭代器、引用、指针全失效；deque 中间插删标准判全部失效，两端插删迭代器失效但引用仍有效；list 只有被删的那个节点失效，其他节点地址永远不变。记不住就记一句：容器一改，先想迭代器。',
+    code: '// vector：扩容 → 迭代器、引用、指针全失效\n// deque ：中间插删 → 全部失效\n//         两端插删 → 迭代器失效，引用有效\n// list  ：只有被删的节点失效\n// 记一句：容器一改，先想迭代器',
+    highlight: [1, 2, 3],
+    stage: `
+<svg viewBox="0 0 760 420" role="img" aria-label="vector、deque、list 的迭代器与引用失效规则表">
+  <text x="28" y="32" class="svg-title">容器一改，先想迭代器</text>
+
+  <rect x="28" y="72" width="112" height="40" rx="6" class="svg-box-ghost"/>
+  <text x="84" y="98" text-anchor="middle" class="svg-small">容器</text>
+  <rect x="142" y="72" width="208" height="40" rx="6" class="svg-box-ghost"/>
+  <text x="154" y="98" class="svg-small">发生了什么</text>
+  <rect x="352" y="72" width="208" height="40" rx="6" class="svg-box-ghost"/>
+  <text x="364" y="98" class="svg-small">迭代器</text>
+  <rect x="562" y="72" width="176" height="40" rx="6" class="svg-box-ghost"/>
+  <text x="574" y="98" class="svg-small">引用 / 指针</text>
+
+  <rect x="28" y="112" width="112" height="82" rx="6" class="svg-box"/>
+  <text x="84" y="161" text-anchor="middle" class="svg-mono">vector</text>
+  <rect x="142" y="112" width="208" height="82" rx="6" class="svg-box"/>
+  <text x="154" y="148" class="svg-small">扩容：整块内存搬走</text>
+  <text x="154" y="170" class="svg-small">尾插也可能触发扩容</text>
+  <rect x="352" y="112" width="208" height="82" rx="6" class="svg-box-bad"/>
+  <text x="364" y="161" class="svg-bad-text" style="font-size:12px">全部失效</text>
+  <rect x="562" y="112" width="176" height="82" rx="6" class="svg-box-bad"/>
+  <text x="574" y="161" class="svg-bad-text" style="font-size:12px">全部失效</text>
+
+  <rect x="28" y="194" width="112" height="82" rx="6" class="svg-box"/>
+  <text x="84" y="243" text-anchor="middle" class="svg-mono">deque</text>
+  <rect x="142" y="194" width="208" height="82" rx="6" class="svg-box"/>
+  <text x="154" y="230" class="svg-small">中间插删：一侧整体搬</text>
+  <text x="154" y="252" class="svg-small">两端：新建块，旧元素不动</text>
+  <rect x="352" y="194" width="208" height="82" rx="6" class="svg-box-warn"/>
+  <text x="364" y="228" class="svg-bad-text" style="font-size:12px">中间：全部失效</text>
+  <text x="364" y="250" class="svg-small">两端：也全部失效</text>
+  <rect x="562" y="194" width="176" height="82" rx="6" class="svg-box"/>
+  <text x="574" y="228" class="svg-bad-text" style="font-size:12px">中间：全部失效</text>
+  <text x="574" y="250" class="svg-good-text" style="font-size:11.5px">两端：仍有效</text>
+
+  <rect x="28" y="276" width="112" height="82" rx="6" class="svg-box"/>
+  <text x="84" y="325" text-anchor="middle" class="svg-mono">list</text>
+  <rect x="142" y="276" width="208" height="82" rx="6" class="svg-box"/>
+  <text x="154" y="312" class="svg-small">插入 / 删除只改指针</text>
+  <text x="154" y="334" class="svg-small">节点原地不动</text>
+  <rect x="352" y="276" width="208" height="82" rx="6" class="svg-box-good"/>
+  <text x="364" y="319" class="svg-good-text" style="font-size:12px">只有被删节点失效</text>
+  <rect x="562" y="276" width="176" height="82" rx="6" class="svg-box-good"/>
+  <text x="574" y="312" class="svg-good-text" style="font-size:11.5px">其他节点地址不变</text>
+  <text x="574" y="334" class="svg-good-text" style="font-size:11.5px">指针、引用仍有效</text>
+
+  <text x="28" y="382" class="svg-text">deque 两端插删：元素地址没动，但标准仍判迭代器失效。</text>
+  <text x="28" y="402" class="svg-small">记一句：容器一改，先想迭代器。</text>
+</svg>
+`
+  }
+];
+</script>
+<script src="visual.js"></script>
+</body>
+</html>

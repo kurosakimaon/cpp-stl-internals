@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C++ 内功期 · 学习总路线图</title>
+<style>
+  :root {
+    --ink: #12262d;
+    --ink-soft: #40565d;
+    --muted: #6b7f84;
+    --paper: #f6f3ea;
+    --card: #fffdf7;
+    --line: #ddd6c6;
+    --teal: #0f766e;
+    --teal-deep: #0b4f4a;
+    --teal-soft: #dff4ef;
+    --amber: #b45309;
+    --amber-soft: #fdf0dc;
+    --navy: #0b1f28;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    padding: 26px 20px 54px;
+    background:
+      radial-gradient(circle at 8% 4%, rgba(15, 118, 110, .10), transparent 30%),
+      radial-gradient(circle at 94% 20%, rgba(180, 83, 9, .08), transparent 26%),
+      var(--paper);
+    color: var(--ink);
+    font-family: 'Microsoft YaHei', 'PingFang SC', 'Noto Sans SC', sans-serif;
+    line-height: 1.75;
+  }
+
+  .page { max-width: 1120px; margin: 0 auto; }
+
+  .crumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .crumbs a {
+    display: inline-block;
+    padding: 7px 14px;
+    border: 1px solid rgba(18, 38, 45, .28);
+    border-radius: 999px;
+    color: var(--ink);
+    background: rgba(255, 253, 247, .62);
+    font-size: 12.5px;
+    text-decoration: none;
+    transition: background .2s, color .2s;
+  }
+
+  .crumbs a:hover { background: var(--ink); color: #fff; }
+
+  .hero {
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(300px, .7fr);
+    gap: 34px;
+    padding: 44px 42px 40px;
+    border-radius: 26px;
+    background:
+      linear-gradient(rgba(126, 211, 197, .07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(126, 211, 197, .07) 1px, transparent 1px),
+      radial-gradient(circle at 82% 18%, rgba(20, 184, 166, .20), transparent 36%),
+      linear-gradient(145deg, #0b1f28, #123640 62%, #0b242b);
+    background-size: 28px 28px, 28px 28px, 100% 100%, 100% 100%;
+    color: #e9f6f3;
+    box-shadow: 0 24px 60px rgba(11, 31, 40, .28);
+  }
+
+  .hero::after {
+    content: '';
+    position: absolute;
+    right: -70px;
+    bottom: -120px;
+    width: 330px;
+    height: 330px;
+    border: 1px solid rgba(126, 211, 197, .22);
+    border-radius: 50%;
+    box-shadow: 0 0 0 34px rgba(126, 211, 197, .05), 0 0 0 70px rgba(126, 211, 197, .03);
+    pointer-events: none;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 16px;
+    color: #9fe3d8;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+
+  .eyebrow::before {
+    content: '';
+    width: 26px;
+    height: 1px;
+    background: #9fe3d8;
+  }
+
+  .hero h1 {
+    margin: 0 0 18px;
+    font-family: 'Noto Serif SC', 'Songti SC', 'SimSun', serif;
+    font-size: clamp(30px, 3.7vw, 49px);
+    line-height: 1.28;
+    letter-spacing: .01em;
+  }
+
+  .hero h1 em {
+    color: #f5c47a;
+    font-style: normal;
+  }
+
+  .lede {
+    max-width: 640px;
+    margin: 0 0 26px;
+    color: #bfd8d3;
+    font-size: 14.5px;
+    line-height: 1.95;
+  }
+
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 11px 20px;
+    border-radius: 10px;
+    font-size: 13.5px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: transform .18s, background .18s, color .18s;
+  }
+
+  .btn-primary { background: #f0b35c; color: #2a1a08; }
+  .btn-primary:hover { transform: translateY(-2px); background: #ffc774; }
+
+  .btn-ghost {
+    border: 1px solid rgba(203, 239, 232, .38);
+    color: #d9f2ed;
+  }
+  .btn-ghost:hover { background: rgba(255, 255, 255, .10); }
+
+  .hero-link {
+    color: #9fe3d8;
+    font-size: 12.5px;
+    text-underline-offset: 4px;
+  }
+
+  .hero-card {
+    position: relative;
+    z-index: 1;
+    align-self: center;
+    padding: 22px 22px 20px;
+    border: 1px solid rgba(203, 239, 232, .20);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, .06);
+    backdrop-filter: blur(2px);
+  }
+
+  .hero-card-label {
+    color: #9fe3d8;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .14em;
+  }
+
+  .route-track {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 16px 0 20px;
+  }
+
+  .route-track span {
+    display: grid;
+    place-items: center;
+    flex: 0 0 30px;
+    width: 30px;
+    height: 30px;
+    border: 1px solid rgba(159, 227, 216, .55);
+    border-radius: 50%;
+    color: #d9f2ed;
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .route-track span.on {
+    border-color: #f0b35c;
+    background: #f0b35c;
+    color: #2a1a08;
+    font-weight: 700;
+  }
+
+  .route-track i {
+    flex: 1;
+    height: 1px;
+    background: rgba(159, 227, 216, .35);
+  }
+
+  .hero-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin: 0 0 16px;
+  }
+
+  .hero-stats div { text-align: center; }
+
+  .hero-stats b {
+    display: block;
+    color: #fff;
+    font-family: 'Noto Serif SC', 'Songti SC', serif;
+    font-size: 26px;
+    line-height: 1.2;
+  }
+
+  .hero-stats span {
+    color: #a9cbc4;
+    font-size: 10.5px;
+    letter-spacing: .04em;
+  }
+
+  .hero-card p {
+    margin: 0;
+    padding-top: 14px;
+    border-top: 1px solid rgba(203, 239, 232, .16);
+    color: #b4d3cc;
+    font-size: 12px;
+    line-height: 1.8;
+  }
+
+  main { padding-top: 40px; }
+
+  section + section { margin-top: 48px; }
+
+  .section-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .section-head h2 {
+    margin: 0;
+    font-family: 'Noto Serif SC', 'Songti SC', serif;
+    font-size: 26px;
+    line-height: 1.4;
+  }
+
+  .section-head p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+
+  .phase-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+
+  .phase {
+    position: relative;
+    padding: 22px 20px 20px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--card);
+  }
+
+  .phase.current {
+    border-color: #8dcfc4;
+    background: linear-gradient(160deg, #ffffff, #eaf7f4);
+    box-shadow: 0 12px 26px rgba(15, 118, 110, .10);
+  }
+
+  .phase-no {
+    display: inline-block;
+    margin-bottom: 10px;
+    color: var(--teal);
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .1em;
+  }
+
+  .phase h3 {
+    margin: 0 0 8px;
+    font-size: 18px;
+  }
+
+  .phase p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 13px;
+    line-height: 1.85;
+  }
+
+  .steps { margin: 0; padding: 0; list-style: none; }
+
+  .step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 68px minmax(0, 1fr) 214px;
+    gap: 20px;
+    padding: 22px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .step:first-child { border-top: 1px solid var(--line); }
+
+  .step-no {
+    display: grid;
+    place-items: center;
+    width: 54px;
+    height: 54px;
+    border: 1px solid #b9d9d2;
+    border-radius: 50%;
+    color: var(--teal-deep);
+    background: var(--teal-soft);
+    font-family: 'Noto Serif SC', 'Songti SC', serif;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .step-key {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+  }
+
+  .tag {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    color: var(--teal-deep);
+    background: var(--teal-soft);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .04em;
+  }
+
+  .tag.hot {
+    color: #7c2d12;
+    background: var(--amber-soft);
+  }
+
+  .step-key span {
+    color: var(--muted);
+    font-size: 11px;
+    font-family: Consolas, 'Courier New', monospace;
+  }
+
+  .step h3 {
+    margin: 0 0 6px;
+    font-size: 19px;
+    line-height: 1.5;
+  }
+
+  .step .question {
+    margin: 0 0 8px;
+    color: var(--ink-soft);
+    font-size: 13.5px;
+    line-height: 1.85;
+  }
+
+  .step .checkpoint {
+    margin: 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.8;
+  }
+
+  .step .checkpoint b { color: var(--teal-deep); }
+
+  .step-links {
+    align-self: center;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .step-links a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    color: var(--ink);
+    background: var(--card);
+    font-size: 11.5px;
+    text-decoration: none;
+    transition: border-color .18s, background .18s;
+  }
+
+  .step-links a:hover {
+    border-color: #8dcfc4;
+    background: #f0faf7;
+  }
+
+  .step-links a span {
+    color: var(--muted);
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 10px;
+  }
+
+  .step-links a strong { font-weight: 700; }
+
+  .loop {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .loop-item {
+    padding: 18px 16px;
+    border-radius: 14px;
+    background: var(--card);
+    border: 1px solid var(--line);
+  }
+
+  .loop-item b {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--teal);
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 11px;
+    letter-spacing: .1em;
+  }
+
+  .loop-item h3 {
+    margin: 0 0 6px;
+    font-size: 15.5px;
+  }
+
+  .loop-item p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 12.5px;
+    line-height: 1.8;
+  }
+
+  .quote {
+    display: grid;
+    grid-template-columns: 4px minmax(0, 1fr);
+    gap: 18px;
+    padding: 20px 22px;
+    border: 1px solid #eccfa6;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #fffaf0, #fdf1df);
+  }
+
+  .quote::before {
+    content: '';
+    border-radius: 4px;
+    background: #d99a4e;
+  }
+
+  .quote p {
+    margin: 0;
+    color: #5a3a1b;
+    font-size: 13.5px;
+    line-height: 1.9;
+  }
+
+  .quote strong { color: #7c2d12; }
+
+  .outcomes {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .outcomes li {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 10px;
+    padding: 13px 14px;
+    border-radius: 10px;
+    background: rgba(255, 253, 247, .78);
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+    font-size: 12.5px;
+    line-height: 1.8;
+  }
+
+  .outcomes li i {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    margin-top: 1px;
+    border-radius: 50%;
+    color: #fff;
+    background: var(--teal);
+    font-style: normal;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .outcomes li strong { color: var(--ink); }
+
+  .foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-top: 48px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .foot-links { display: flex; flex-wrap: wrap; gap: 14px; }
+
+  .foot a {
+    color: var(--teal-deep);
+    text-underline-offset: 3px;
+  }
+
+  a:focus-visible {
+    outline: 3px solid #68b7a9;
+    outline-offset: 2px;
+  }
+
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: 1fr; padding: 34px 26px; }
+    .phase-grid { grid-template-columns: 1fr; }
+    .step { grid-template-columns: 54px minmax(0, 1fr); }
+    .step-links { grid-column: 2; flex-direction: row; flex-wrap: wrap; }
+    .step-links a { flex: 1; min-width: 150px; }
+  }
+
+  @media (max-width: 620px) {
+    body { padding: 16px 12px 40px; }
+    .hero h1 { font-size: 30px; }
+    .loop { grid-template-columns: 1fr 1fr; }
+    .outcomes { grid-template-columns: 1fr; }
+    .step { gap: 14px; }
+    .step-no { width: 44px; height: 44px; font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <nav class="crumbs">
+    <a href="stl_internals/index.html">STL 模块目录</a>
+    <a href="stl_internals/tutorial.md">详细教程</a>
+    <a href="visuals/index.html">图解专区</a>
+  </nav>
+
+  <header class="hero">
+    <div>
+      <p class="eyebrow">C++ 内功期 · 学习总路线</p>
+      <h1>先会用，再拆开，<br>最后<em>自己验证</em>。</h1>
+      <p class="lede">
+        这份路线覆盖内功期的 STL 源码解剖模块：六章可编译的探针程序，配六张交互图解。
+        每一章都不背私有变量名，而是先跑出证据，再回答“标准库到底怎么做到”。
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="stl_internals/index.html">从第 1 步开始</a>
+        <a class="btn btn-ghost" href="visuals/index.html">先看图解</a>
+        <a class="hero-link" href="stl_internals/tutorial.md">阅读完整大纲 →</a>
+      </div>
+    </div>
+
+    <aside class="hero-card">
+      <div class="hero-card-label">学习主线 · 六章</div>
+      <div class="route-track">
+        <span class="on">01</span><i></i>
+        <span>02</span><i></i>
+        <span>03</span><i></i>
+        <span>04</span><i></i>
+        <span>05</span><i></i>
+        <span>06</span>
+      </div>
+      <div class="hero-stats">
+        <div><b>6</b><span>章源码探针</span></div>
+        <div><b>6</b><span>张交互图解</span></div>
+        <div><b>40</b><span>帧分步动画</span></div>
+      </div>
+      <p>每一章 = 一个可编译程序 + 一张图解 + 教程里的一节。先跑、再读、后看图，最后改探针。</p>
+    </aside>
+  </header>
+
+  <main>
+    <section>
+      <div class="section-head">
+        <h2>路线总览</h2>
+        <p>三个阶段，一条主线，不跳步。</p>
+      </div>
+      <div class="phase-grid">
+        <article class="phase">
+          <span class="phase-no">00 · 前置</span>
+          <h3>先会用</h3>
+          <p>知道什么场景选 vector、list、deque、map、unordered_map，能写出常见操作。这一层是地基，本模块不重复讲 API。</p>
+        </article>
+        <article class="phase current">
+          <span class="phase-no">01 — 06 · 本模块</span>
+          <h3>再拆开</h3>
+          <p>从配置器到迭代器，六章逐层往下：内存从哪来、元素怎么存、树怎么平衡、桶怎么扩容、算法怎么分派。</p>
+        </article>
+        <article class="phase">
+          <span class="phase-no">复盘 · 收口</span>
+          <h3>后验证</h3>
+          <p>改类型、改数量、换坏哈希，用输出验证结论；再把每章练习做完。看懂不算会，能复现才算。</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>六步主线</h2>
+        <p>按顺序走。第 1 步是地基，第 4 步是重头戏，第 6 步把前面串起来。</p>
+      </div>
+
+      <ol class="steps">
+        <li class="step">
+          <div class="step-no">01</div>
+          <div>
+            <div class="step-key"><span class="tag">地基</span><span>01_allocator_traits.cpp</span></div>
+            <h3>配置器：容器的地基</h3>
+            <p class="question">容器不直接 new，那节点和缓冲区从哪来？为什么“分配内存”和“构造对象”要拆成两步？</p>
+            <p class="checkpoint"><b>验收：</b>能说清 allocate / construct、destroy / deallocate 的顺序，以及 rebind 为什么把 int 配置器变成节点配置器。</p>
+          </div>
+          <div class="step-links">
+            <a href="stl_internals/01_allocator_traits.cpp"><strong>读源码</strong><span>01</span></a>
+            <a href="visuals/allocator.html"><strong>看图解</strong><span>6 步</span></a>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-no">02</div>
+          <div>
+            <div class="step-key"><span class="tag">高频</span><span>02_vector_internals.cpp</span></div>
+            <h3>vector：三根指针与增长曲线</h3>
+            <p class="question">为什么 push_back 单次可能是 O(n)，摊到每一次却成了 O(1)？扩容之后，哪些东西作废了？</p>
+            <p class="checkpoint"><b>验收：</b>画出 _M_start / _M_finish / _M_end_of_storage，解释 2 倍扩容、reserve 与 resize 的差别、迭代器失效的边界。</p>
+          </div>
+          <div class="step-links">
+            <a href="stl_internals/02_vector_internals.cpp"><strong>读源码</strong><span>02</span></a>
+            <a href="visuals/dynamic_array.html"><strong>看图解</strong><span>7 步</span></a>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-no">03</div>
+          <div>
+            <div class="step-key"><span class="tag">结构</span><span>03_list_deque_internals.cpp</span></div>
+            <h3>list 与 deque：节点和分段</h3>
+            <p class="question">splice 为什么一个元素都不用搬？deque 明明不是连续内存，为什么还能用下标随机访问？</p>
+            <p class="checkpoint"><b>验收：</b>说出哨兵环的作用、deque 中控器与缓冲区的关系，分清三种容器在两端和中间插入时的失效规则。</p>
+          </div>
+          <div class="step-links">
+            <a href="stl_internals/03_list_deque_internals.cpp"><strong>读源码</strong><span>03</span></a>
+            <a href="visuals/list_deque.html"><strong>看图解</strong><span>7 步</span></a>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-no">04</div>
+          <div>
+            <div class="step-key"><span class="tag hot">重头戏</span><span>04_rbtree_map_internals.cpp</span></div>
+            <h3>map / set：红黑树的平衡术</h3>
+            <p class="question">插入之后，树怎么自己修好？什么时候只变色，什么时候单旋，什么时候要双旋？</p>
+            <p class="checkpoint"><b>验收：</b>记住五条规矩，能手推三种插入修复；解释 header 为什么让 end() 有实体，以及 operator[] 的插入语义。</p>
+          </div>
+          <div class="step-links">
+            <a href="stl_internals/04_rbtree_map_internals.cpp"><strong>读源码</strong><span>04</span></a>
+            <a href="visuals/rb_tree.html"><strong>看图解</strong><span>7 步</span></a>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-no">05</div>
+          <div>
+            <div class="step-key"><span class="tag">结构</span><span>05_hashtable_internals.cpp</span></div>
+            <h3>unordered_map：桶、链表与 rehash</h3>
+            <p class="question">为什么 rehash 之后迭代器全废，指针和引用却还活着？坏哈希会把 O(1) 拖成什么样？</p>
+            <p class="checkpoint"><b>验收：</b>画出桶数组 + 全局单链表，解释装填因子与质数扩容，能用桶链长度和比较次数说明哈希质量。</p>
+          </div>
+          <div class="step-links">
+            <a href="stl_internals/05_hashtable_internals.cpp"><strong>读源码</strong><span>05</span></a>
+            <a href="visuals/hash_table.html"><strong>看图解</strong><span>7 步</span></a>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-no">06</div>
+          <div>
+            <div class="step-key"><span class="tag">收口</span><span>06_iterators_algorithms.cpp</span></div>
+            <h3>迭代器与算法：STL 的胶水</h3>
+            <p class="question">同一句 advance，为什么随机访问只要一步，前向迭代器却要走 1000 步？sort 又为什么要准备三套算法？</p>
+            <p class="checkpoint"><b>验收：</b>说清五类迭代器与 iterator_traits、标签分派、内省排序的三路切换，以及 lower_bound 与 find_if 的量级差。</p>
+          </div>
+          <div class="step-links">
+            <a href="stl_internals/06_iterators_algorithms.cpp"><strong>读源码</strong><span>06</span></a>
+            <a href="visuals/iterators.html"><strong>看图解</strong><span>6 步</span></a>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>每章怎么走</h2>
+        <p>同一个循环，走六遍。不要从第一行源码读到尾。</p>
+      </div>
+      <div class="loop">
+        <article class="loop-item">
+          <b>STEP 01</b>
+          <h3>先跑</h3>
+          <p>编译并运行本章探针，先看输出里哪些数字出乎意料，带着问题再读。</p>
+        </article>
+        <article class="loop-item">
+          <b>STEP 02</b>
+          <h3>再读</h3>
+          <p>对照教程里的重点，只看成员变量和关键函数，不抠模板细节。</p>
+        </article>
+        <article class="loop-item">
+          <b>STEP 03</b>
+          <h3>看图</h3>
+          <p>用图解把指针、节点、桶链串起来，单步走到你能自己复述为止。</p>
+        </article>
+        <article class="loop-item">
+          <b>STEP 04</b>
+          <h3>改探针</h3>
+          <p>换类型、换数量、换哈希，把结论重新跑一遍；输出变了，理解才落地。</p>
+        </article>
+      </div>
+      <div class="quote">
+        <p><strong>读源码不是为了炫技，是为了少踩坑、选对容器、写出能推演性能的代码。</strong>
+        标准规定“保证什么”，源码展示“怎么做到”；别把 _M_start 这种私有名字当成标准。</p>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>学完能做到</h2>
+        <p>七条验收标准，来自模块的学习目标。</p>
+      </div>
+      <ul class="outcomes">
+        <li><i>1</i><span>说清 <strong>STL 六大组件</strong>的关系，理解配置器把内存分配和对象构造拆开。</span></li>
+        <li><i>2</i><span>画出 <strong>vector 的三根指针</strong>，解释 size / capacity、扩容倍数和迭代器失效。</span></li>
+        <li><i>3</i><span>说清 <strong>list 的哨兵</strong>、<strong>deque 的中控器与缓冲区</strong>，知道何时失效。</span></li>
+        <li><i>4</i><span>说清 <strong>红黑树五条规矩</strong>，能手推变色、单旋、双旋三种修复。</span></li>
+        <li><i>5</i><span>说清 <strong>桶数组 + 单链表</strong>，理解 bucket_count、装填因子和 rehash。</span></li>
+        <li><i>6</i><span>理解 <strong>迭代器分类与 traits</strong>，知道 sort 为什么是内省排序、lower_bound 为什么是 O(log n)。</span></li>
+        <li><i>7</i><span>能自己写<strong>探针程序</strong>，用 sizeof、地址和计数器验证源码结论。</span></li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>本路线覆盖内功期的 STL 源码解剖模块，实现细节以 libstdc++ 为主，MSVC / libc++ 的差异在教程中标注。</span>
+    <div class="foot-links">
+      <a href="stl_internals/index.html">模块目录</a>
+      <a href="stl_internals/tutorial.md">详细教程</a>
+      <a href="visuals/index.html">图解专区</a>
+    </div>
+  </footer>
+</div>
+</body>
+</html>
