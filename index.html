@@ -3,21 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>(function(){var d=document.documentElement,p="auto",t;try{p=localStorage.getItem("lh-theme")||"auto";}catch(e){}if(p!=="light"&&p!=="dark")p="auto";try{t=p==="auto"?(window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches?"light":"dark"):p;}catch(e){t="dark";}d.setAttribute("data-theme",t);d.setAttribute("data-theme-pref",p);})();</script>
 <title>C++ 内功期 · 学习总路线图</title>
 <style>
   :root {
-    --ink: #12262d;
-    --ink-soft: #40565d;
-    --muted: #6b7f84;
-    --paper: #f6f3ea;
-    --card: #fffdf7;
-    --line: #ddd6c6;
-    --teal: #0f766e;
-    --teal-deep: #0b4f4a;
-    --teal-soft: #dff4ef;
-    --amber: #b45309;
-    --amber-soft: #fdf0dc;
-    --navy: #0b1f28;
+    --ink: var(--lh-ink-l-cb2b);
+    --ink-soft: var(--lh-ink-l-cb4b);
+    --muted: var(--lh-ink-l-cb5b);
+    --paper: var(--lh-bg-l-n9b);
+    --card: var(--lh-bg-l-n9c);
+    --line: var(--lh-line-l-o8b);
+    --teal: var(--lh-acc-l-tc5b);
+    --teal-deep: var(--lh-ink-l-tc3b);
+    --teal-soft: var(--lh-bg-l-n9d);
+    --amber: var(--lh-ink-l-or5b);
+    --amber-soft: var(--lh-bg-l-o9b);
+    --navy: var(--lh-bg-l-cb2b);
   }
 
   * { box-sizing: border-box; }
@@ -47,16 +48,16 @@
   .crumbs a {
     display: inline-block;
     padding: 7px 14px;
-    border: 1px solid rgba(18, 38, 45, .28);
+    border: 1px solid var(--lh-line-l-cb2-a28b);
     border-radius: 999px;
     color: var(--ink);
-    background: rgba(255, 253, 247, .62);
+    background: var(--lh-bg-l-n9-a62b);
     font-size: 12.5px;
     text-decoration: none;
     transition: background .2s, color .2s;
   }
 
-  .crumbs a:hover { background: var(--ink); color: #fff; }
+  .crumbs a:hover { background: var(--lh-bg-l-cb2c); color: var(--lh-ink-l-n9b); }
 
   .hero {
     position: relative;
@@ -67,13 +68,13 @@
     padding: 44px 42px 40px;
     border-radius: 26px;
     background:
-      linear-gradient(rgba(126, 211, 197, .07) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(126, 211, 197, .07) 1px, transparent 1px),
-      radial-gradient(circle at 82% 18%, rgba(20, 184, 166, .20), transparent 36%),
-      linear-gradient(145deg, #0b1f28, #123640 62%, #0b242b);
+      linear-gradient(var(--lh-bg-l-tc7-a7b) 1px, transparent 1px),
+      linear-gradient(90deg, var(--lh-bg-l-tc7-a7b) 1px, transparent 1px),
+      radial-gradient(circle at 82% 18%, var(--lh-bg-l-tc6-a20b), transparent 36%),
+      linear-gradient(145deg, var(--lh-bg-l-cb2b), var(--lh-bg-l-cb3b) 62%, var(--lh-bg-l-cb2d));
     background-size: 28px 28px, 28px 28px, 100% 100%, 100% 100%;
-    color: #e9f6f3;
-    box-shadow: 0 24px 60px rgba(11, 31, 40, .28);
+    color: var(--lh-ink-l-n9c);
+    box-shadow: 0 24px 60px var(--lh-shd-l-cb2-a28b);
   }
 
   .hero::after {
@@ -83,9 +84,9 @@
     bottom: -120px;
     width: 330px;
     height: 330px;
-    border: 1px solid rgba(126, 211, 197, .22);
+    border: 1px solid var(--lh-line-l-tc7-a22b);
     border-radius: 50%;
-    box-shadow: 0 0 0 34px rgba(126, 211, 197, .05), 0 0 0 70px rgba(126, 211, 197, .03);
+    box-shadow: 0 0 0 34px var(--lh-shd-l-tc7-a5b), 0 0 0 70px var(--lh-shd-l-tc7-a3b);
     pointer-events: none;
   }
 
@@ -94,7 +95,7 @@
     align-items: center;
     gap: 8px;
     margin: 0 0 16px;
-    color: #9fe3d8;
+    color: var(--lh-ink-l-tc8b);
     font-size: 12px;
     font-weight: 700;
     letter-spacing: .16em;
@@ -105,7 +106,7 @@
     content: '';
     width: 26px;
     height: 1px;
-    background: #9fe3d8;
+    background: var(--lh-bgh-l-tc8b);
   }
 
   .hero h1 {
@@ -117,14 +118,14 @@
   }
 
   .hero h1 em {
-    color: #f5c47a;
+    color: var(--lh-ink-l-o8b);
     font-style: normal;
   }
 
   .lede {
     max-width: 640px;
     margin: 0 0 26px;
-    color: #bfd8d3;
+    color: var(--lh-ink-l-tg8b);
     font-size: 14.5px;
     line-height: 1.95;
   }
@@ -146,17 +147,17 @@
     transition: transform .18s, background .18s, color .18s;
   }
 
-  .btn-primary { background: #f0b35c; color: #2a1a08; }
-  .btn-primary:hover { transform: translateY(-2px); background: #ffc774; }
+  .btn-primary { background: var(--lh-bg-l-o7b); color: var(--lh-ink-l-or2b); }
+  .btn-primary:hover { transform: translateY(-2px); background: var(--lh-bg-l-o8b); }
 
   .btn-ghost {
-    border: 1px solid rgba(203, 239, 232, .38);
-    color: #d9f2ed;
+    border: 1px solid var(--lh-line-l-tg8-a38b);
+    color: var(--lh-ink-l-tg8c);
   }
-  .btn-ghost:hover { background: rgba(255, 255, 255, .10); }
+  .btn-ghost:hover { background: var(--lh-bg-l-n9-a10b); }
 
   .hero-link {
-    color: #9fe3d8;
+    color: var(--lh-ink-l-tc8b);
     font-size: 12.5px;
     text-underline-offset: 4px;
   }
@@ -166,14 +167,14 @@
     z-index: 1;
     align-self: center;
     padding: 22px 22px 20px;
-    border: 1px solid rgba(203, 239, 232, .20);
+    border: 1px solid var(--lh-line-l-tg8-a20b);
     border-radius: 16px;
-    background: rgba(255, 255, 255, .06);
+    background: var(--lh-bg-l-n9-a6b);
     backdrop-filter: blur(2px);
   }
 
   .hero-card-label {
-    color: #9fe3d8;
+    color: var(--lh-ink-l-tc8b);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: .14em;
@@ -192,24 +193,24 @@
     flex: 0 0 30px;
     width: 30px;
     height: 30px;
-    border: 1px solid rgba(159, 227, 216, .55);
+    border: 1px solid var(--lh-line-l-tc8-a55b);
     border-radius: 50%;
-    color: #d9f2ed;
+    color: var(--lh-ink-l-tg8c);
     font-size: 10.5px;
     font-variant-numeric: tabular-nums;
   }
 
   .route-track span.on {
-    border-color: #f0b35c;
-    background: #f0b35c;
-    color: #2a1a08;
+    border-color: var(--lh-line-l-o7b);
+    background: var(--lh-bg-l-o7b);
+    color: var(--lh-ink-l-or2b);
     font-weight: 700;
   }
 
   .route-track i {
     flex: 1;
     height: 1px;
-    background: rgba(159, 227, 216, .35);
+    background: var(--lh-bg-l-tc8-a35b);
   }
 
   .hero-stats {
@@ -223,14 +224,14 @@
 
   .hero-stats b {
     display: block;
-    color: #fff;
+    color: var(--lh-ink-l-n9b);
     font-family: 'Noto Serif SC', 'Songti SC', serif;
     font-size: 26px;
     line-height: 1.2;
   }
 
   .hero-stats span {
-    color: #a9cbc4;
+    color: var(--lh-ink-l-tg7b);
     font-size: 10.5px;
     letter-spacing: .04em;
   }
@@ -238,8 +239,8 @@
   .hero-card p {
     margin: 0;
     padding-top: 14px;
-    border-top: 1px solid rgba(203, 239, 232, .16);
-    color: #b4d3cc;
+    border-top: 1px solid var(--lh-line-l-tg8-a16b);
+    color: var(--lh-ink-l-tg8d);
     font-size: 12px;
     line-height: 1.8;
   }
@@ -287,15 +288,15 @@
   }
 
   .phase.current {
-    border-color: #8dcfc4;
-    background: linear-gradient(160deg, #ffffff, #eaf7f4);
-    box-shadow: 0 12px 26px rgba(15, 118, 110, .10);
+    border-color: var(--lh-line-l-tc7b);
+    background: linear-gradient(160deg, var(--lh-bg-l-n9e), var(--lh-bg-l-n9f));
+    box-shadow: 0 12px 26px var(--lh-shd-l-tc5-a10b);
   }
 
   .phase-no {
     display: inline-block;
     margin-bottom: 10px;
-    color: var(--teal);
+    color: var(--lh-ink-l-tc5b);
     font-family: Consolas, 'Courier New', monospace;
     font-size: 11px;
     font-weight: 700;
@@ -332,7 +333,7 @@
     place-items: center;
     width: 54px;
     height: 54px;
-    border: 1px solid #b9d9d2;
+    border: 1px solid var(--lh-line-l-tg8b);
     border-radius: 50%;
     color: var(--teal-deep);
     background: var(--teal-soft);
@@ -361,11 +362,13 @@
   }
 
   .tag.hot {
-    color: #7c2d12;
+    color: var(--lh-ink-l-or3b);
     background: var(--amber-soft);
   }
 
-  .step-key span {
+  /* 原来这条是 .step-key span，权重压过 .tag，把胶囊上作者写的深青字
+   挤成了 --muted（3.67，够不上 AA）；排除 .tag 让它按本意显示 */
+.step-key span:not(.tag) {
     color: var(--muted);
     font-size: 11px;
     font-family: Consolas, 'Courier New', monospace;
@@ -416,8 +419,8 @@
   }
 
   .step-links a:hover {
-    border-color: #8dcfc4;
-    background: #f0faf7;
+    border-color: var(--lh-line-l-tc7b);
+    background: var(--lh-bg-l-n9g);
   }
 
   .step-links a span {
@@ -445,7 +448,7 @@
   .loop-item b {
     display: block;
     margin-bottom: 4px;
-    color: var(--teal);
+    color: var(--lh-ink-l-tc5b);
     font-family: Consolas, 'Courier New', monospace;
     font-size: 11px;
     letter-spacing: .1em;
@@ -468,25 +471,25 @@
     grid-template-columns: 4px minmax(0, 1fr);
     gap: 18px;
     padding: 20px 22px;
-    border: 1px solid #eccfa6;
+    border: 1px solid var(--lh-line-l-o8c);
     border-radius: 14px;
-    background: linear-gradient(135deg, #fffaf0, #fdf1df);
+    background: linear-gradient(135deg, var(--lh-bg-l-n9h), var(--lh-bg-l-o9c));
   }
 
   .quote::before {
     content: '';
     border-radius: 4px;
-    background: #d99a4e;
+    background: var(--lh-bg-l-or6b);
   }
 
   .quote p {
     margin: 0;
-    color: #5a3a1b;
+    color: var(--lh-ink-l-or3c);
     font-size: 13.5px;
     line-height: 1.9;
   }
 
-  .quote strong { color: #7c2d12; }
+  .quote strong { color: var(--lh-ink-l-or3b); }
 
   .outcomes {
     display: grid;
@@ -503,7 +506,7 @@
     gap: 10px;
     padding: 13px 14px;
     border-radius: 10px;
-    background: rgba(255, 253, 247, .78);
+    background: var(--lh-bg-l-n9-a78b);
     border: 1px solid var(--line);
     color: var(--ink-soft);
     font-size: 12.5px;
@@ -517,8 +520,8 @@
     height: 20px;
     margin-top: 1px;
     border-radius: 50%;
-    color: #fff;
-    background: var(--teal);
+    color: var(--lh-ink-l-n9b);
+    background: var(--lh-bg-l-tc5b);
     font-style: normal;
     font-size: 11px;
     font-weight: 700;
@@ -547,7 +550,7 @@
   }
 
   a:focus-visible {
-    outline: 3px solid #68b7a9;
+    outline: 3px solid var(--lh-line-l-tc7c);
     outline-offset: 2px;
   }
 
@@ -568,6 +571,9 @@
     .step-no { width: 44px; height: 44px; font-size: 15px; }
   }
 </style>
+
+<link rel="stylesheet" href="assets/theme.css">
+<script src="assets/theme.js" defer></script>
 </head>
 <body>
 <div class="page">
