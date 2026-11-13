@@ -4,6 +4,12 @@
 
 一套面向 C++ 内功期的 STL 源码学习材料：**6 章可编译的探针程序 + 6 张分步图解 + 1 张学习路线图**。每一章都用一个能跑的程序，把 `sizeof`、元素地址、配置器计数器、`bucket_count()` 打印出来，用输出验证结论，而不是抄别人的笔记。
 
+## 在线浏览
+
+**[https://kurosakimaon.github.io/cpp-stl-internals/](https://kurosakimaon.github.io/cpp-stl-internals/)** — 首页就是那张学习总路线图。
+
+从在线入口可以直达[六章分步图解](https://kurosakimaon.github.io/cpp-stl-internals/visuals/index.html)：红黑树旋转、哈希桶扩容、配置器计数这些过程点开就能一步步看。探针程序要本机编译，线上不提供运行结果以外的东西。
+
 ## 快速开始
 
 ```powershell
